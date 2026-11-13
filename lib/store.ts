@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { uuid } from './crypto';
 
@@ -25,10 +26,12 @@ async function sb(p: string, init: RequestInit & { upsert?: boolean } = {}) {
 const q = encodeURIComponent;
 
 // ---------- File fallback (local dev only) ----------
-const FILE = path.join(process.cwd(), 'data', 'db.json');
+// With SKIP_LOGIN on a host without a database (e.g. Vercel) fall back to the temp dir: NOT durable, resets on cold starts.
+const TEMP_OK = process.env.SKIP_LOGIN === '1';
+const FILE = process.env.NODE_ENV === 'production' && TEMP_OK ? path.join(os.tmpdir(), 'evocalendar', 'db.json') : path.join(process.cwd(), 'data', 'db.json');
 type FileDb = { users: User[]; accounts: Account[]; settings: Record<string, Settings> };
 function rd(): FileDb {
-  if (process.env.NODE_ENV === 'production') throw new Error('Database not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  if (process.env.NODE_ENV === 'production' && !TEMP_OK) throw new Error('Database not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
   try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return { users: [], accounts: [], settings: {} }; }
 }
 const wr = (d: FileDb) => { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.writeFileSync(FILE, JSON.stringify(d, null, 2)); };

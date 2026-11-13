@@ -1,6 +1,8 @@
 const prod = process.env.NODE_ENV === 'production';
 // Demo mode (fake sign-in + sample data) only ever runs in local development.
 export const DEMO = !prod && process.env.OAUTH_MODE !== 'live';
+// TEMPORARY: SKIP_LOGIN=1 makes the sign-in button open the app as a shared guest user (no Zoho). Unsafe on a public URL.
+export const SKIP_LOGIN = process.env.SKIP_LOGIN === '1';
 export const BASE = (process.env.BASE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + process.env.VERCEL_PROJECT_PRODUCTION_URL : 'http://localhost:3000')).replace(/\/$/, '');
 export const DC = process.env.ZOHO_DC || 'in'; // Zoho data centre: com, in, eu, com.au, jp
 export const ZOHO_ACCOUNTS = `https://accounts.zoho.${DC}`;

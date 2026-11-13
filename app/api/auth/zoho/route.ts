@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { BASE, DEMO, ZOHO_ACCOUNTS, cred } from '@/lib/config';
+import { BASE, DEMO, SKIP_LOGIN, ZOHO_ACCOUNTS, cred } from '@/lib/config';
 import { sign } from '@/lib/crypto';
 import { withNonce } from '@/lib/oauth';
 
 // Starts "Sign in with Zoho"
 export async function GET() {
+  if (SKIP_LOGIN) return NextResponse.redirect(`${BASE}/api/auth/demo`);
   const { clientId } = cred('zoho');
   if (!clientId) {
     if (DEMO) return NextResponse.redirect(`${BASE}/api/auth/demo`);
