@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
-import { readDb, writeDb } from '@/lib/server';
+import { isRes, requireUser } from '@/lib/session';
+import { getSettings, saveSettings } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
-export function GET() { return NextResponse.json(readDb().settings); }
+export async function GET() {
+  const u = await requireUser();
+  if (isRes(u)) return u;
+  return NextResponse.json(await getSettings(u.id));
+}
 export async function PUT(req: Request) {
+  const u = await requireUser();
+  if (isRes(u)) return u;
   const b = await req.json().catch(() => ({}));
-  const db = readDb();
-  for (const k of ['timezone', 'defaultView', 'syncFrequency']) if (typeof b[k] === 'string') db.settings[k] = b[k];
-  writeDb(db);
-  return NextResponse.json(db.settings);
+  const patch: Record<string, string> = {};
+  for (const k of ['timezone', 'defaultView', 'syncFrequency']) if (typeof b[k] === 'string') patch[k] = b[k];
+  return NextResponse.json(await saveSettings(u.id, patch));
 }

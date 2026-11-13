@@ -1,22 +1,25 @@
-import { NextResponse } from 'next/server';
-import { PROVIDERS, REDIRECT_URI, BASE, cred, oauthStates, readDb, writeDb, tokenRequest, uuid, ProviderId } from '@/lib/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { BASE, PROVIDERS, ProviderId, cred } from '@/lib/config';
+import { tokenRequest } from '@/lib/events';
+import { idTokenClaims, readState } from '@/lib/oauth';
+import { currentUser } from '@/lib/session';
+import { addAccount } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
-export async function GET(req: Request) {
-  const sp = new URL(req.url).searchParams;
-  const back = (q: Record<string, string>) => NextResponse.redirect(`${BASE}/?${new URLSearchParams(q)}`);
-  const state = sp.get('state') || '';
-  const id = oauthStates.get(state);
-  oauthStates.delete(state);
-  if (!id || sp.get('error') || !sp.get('code')) return back({ error: sp.get('error') || 'invalid_state' });
+export async function GET(req: NextRequest) {
+  const back = (q: Record<string, string>) => NextResponse.redirect(`${BASE}/app?${new URLSearchParams(q)}`);
+  const sp = req.nextUrl.searchParams;
+  const st = readState<{ kind: string; provider: ProviderId; uid: string }>(req);
+  const user = await currentUser();
+  if (!st || st.kind !== 'connect' || !user || user.id !== st.uid) return back({ error: 'Connection expired. Please try again.' });
+  if (sp.get('error') || !sp.get('code')) return back({ error: sp.get('error_description') || sp.get('error') || 'Cancelled' });
   try {
-    const c = cred(id);
-    const t = await tokenRequest(PROVIDERS[id as ProviderId], { grant_type: 'authorization_code', code: sp.get('code')!, redirect_uri: REDIRECT_URI, client_id: c.clientId, client_secret: c.clientSecret });
-    let email = id + ' account';
-    if (t.id_token) { try { email = JSON.parse(Buffer.from(t.id_token.split('.')[1], 'base64url').toString()).email || email; } catch {} }
-    const db = readDb();
-    db.accounts.push({ id: uuid(), provider: id, email, accessToken: t.access_token, refreshToken: t.refresh_token, expiresAt: Date.now() + (t.expires_in || 3600) * 1000 });
-    writeDb(db);
+    const p = PROVIDERS[st.provider], c = cred(st.provider);
+    const t = await tokenRequest(p.tokenUrl!, { grant_type: 'authorization_code', code: sp.get('code')!, redirect_uri: `${BASE}/api/oauth/callback`, client_id: c.clientId, client_secret: c.clientSecret });
+    const claims = idTokenClaims(t.id_token);
+    const email = claims.email || claims.preferred_username;
+    if (!email) throw new Error('Could not read the account email');
+    await addAccount({ user_id: user.id, provider: st.provider, email, access_token: t.access_token, refresh_token: t.refresh_token || null, expires_at: Date.now() + (t.expires_in || 3600) * 1000 });
     return back({ connected: email });
   } catch (e: any) { return back({ error: e.message }); }
 }

@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
-import { PROVIDERS, MODE, readDb, writeDb, publicAcct, uuid, ProviderId } from '@/lib/server';
+import { DEMO, PROVIDERS, ProviderId } from '@/lib/config';
+import { isRes, requireUser } from '@/lib/session';
+import { addAccount, listAccounts } from '@/lib/store';
 
+// Local development only
 export async function POST(_: Request, { params }: { params: Promise<{ provider: string }> }) {
-  const { provider } = await params;
-  const p = PROVIDERS[provider as ProviderId];
-  if (!p || MODE !== 'demo') return NextResponse.json({ error: 'Demo connect unavailable' }, { status: 400 });
-  const db = readDb();
-  const n = db.accounts.filter(a => a.provider === provider).length;
-  const [u, d] = p.demoEmail.split('@');
-  const acct = { id: uuid(), provider, email: n ? `${u}${n + 1}@${d}` : p.demoEmail };
-  db.accounts.push(acct);
-  writeDb(db);
-  return NextResponse.json(publicAcct(acct));
+  const u = await requireUser();
+  if (isRes(u)) return u;
+  const id = (await params).provider as ProviderId;
+  const p = PROVIDERS[id];
+  if (!p || !DEMO) return NextResponse.json({ error: 'Not available' }, { status: 404 });
+  const n = (await listAccounts(u.id)).filter(a => a.provider === id).length;
+  const [name, dom] = p.demoEmail.split('@');
+  const email = n ? `${name}${n + 1}@${dom}` : p.demoEmail;
+  await addAccount({ user_id: u.id, provider: id, email });
+  return NextResponse.json({ email });
 }
