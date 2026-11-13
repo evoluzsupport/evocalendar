@@ -15,7 +15,7 @@ export async function GET() {
   const state = sign({ kind: 'login', nonce }, 600);
   const url = `${ZOHO_ACCOUNTS}/oauth/v2/auth?` + new URLSearchParams({
     client_id: clientId, response_type: 'code', redirect_uri: `${BASE}/api/auth/zoho/callback`,
-    scope: 'openid,email,profile', access_type: 'online', prompt: 'select_account', state,
+    scope: 'openid,email,profile', access_type: 'online', state, // Zoho rejects prompt=select_account (400)
   });
   return withNonce(NextResponse.redirect(url), nonce);
 }
