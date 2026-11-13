@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { uuid } from './crypto';
+import { SKIP_LOGIN } from './config';
 
 export interface User { id: string; zoho_id: string; email: string; name: string }
 export interface Account { id: string; user_id: string; provider: string; email: string; access_token?: string | null; refresh_token?: string | null; expires_at?: number | null; caldav?: string | null; password_enc?: string | null }
@@ -27,7 +28,7 @@ const q = encodeURIComponent;
 
 // ---------- File fallback (local dev only) ----------
 // With SKIP_LOGIN on a host without a database (e.g. Vercel) fall back to the temp dir: NOT durable, resets on cold starts.
-const TEMP_OK = process.env.SKIP_LOGIN === '1';
+const TEMP_OK = SKIP_LOGIN;
 const FILE = process.env.NODE_ENV === 'production' && TEMP_OK ? path.join(os.tmpdir(), 'evocalendar', 'db.json') : path.join(process.cwd(), 'data', 'db.json');
 type FileDb = { users: User[]; accounts: Account[]; settings: Record<string, Settings> };
 function rd(): FileDb {
