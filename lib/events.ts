@@ -31,14 +31,16 @@ async function getJson(url: string, headers: Record<string, string>) {
 async function google(a: Account, from: Date, to: Date): Promise<CalEvent[]> {
   const h = { Authorization: 'Bearer ' + (await freshToken(a)) };
   const cals = (await getJson('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader', h)).items || [];
+  const failed: string[] = [];
   const out = await Promise.all(cals.slice(0, 15).map(async (c: any) => {
-    const j = await getJson(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${from.toISOString()}&timeMax=${to.toISOString()}`, h).catch(() => ({ items: [] }));
+    const j = await getJson(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${from.toISOString()}&timeMax=${to.toISOString()}`, h).catch((e: Error) => { failed.push(`${c.summary || c.id}: ${e.message}`); return { items: [] }; });
     return (j.items || []).filter((e: any) => e.status !== 'cancelled').map((e: any): CalEvent => {
       const allDay = !!e.start?.date;
       return { id: 'g' + e.id, provider: 'google', accountEmail: a.email, title: e.summary || '(no title)', allDay, location: e.location,
         start: allDay ? e.start.date + 'T00:00:00' : e.start.dateTime, end: allDay ? e.end.date + 'T00:00:00' : e.end.dateTime }; // all-day = floating local date (no Z)
     });
   }));
+  if (failed.length === cals.length && failed.length) throw new Error('could not read any calendar (' + failed[0] + ')');
   return out.flat();
 }
 
