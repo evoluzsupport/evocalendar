@@ -178,9 +178,11 @@ function demoEvents(accounts: Account[], from: Date, to: Date): CalEvent[] {
 }
 
 export async function fetchEvents(accounts: Account[], from: Date, to: Date): Promise<{ events: CalEvent[]; errors: string[] }> {
-  if (DEMO) return { events: demoEvents(accounts, from, to), errors: [] };
   const errors: string[] = [];
-  const all = await Promise.all(accounts.map(async a => {
+  // In local dev, accounts connected through the fake flow (no tokens/password) get sample meetings; real ones are fetched live.
+  const isReal = (x: Account) => !!(x.access_token || x.refresh_token || x.password_enc);
+  const sample = DEMO ? demoEvents(accounts.filter(x => !isReal(x)), from, to) : [];
+  const all = await Promise.all(accounts.filter(x => !DEMO || isReal(x)).map(async a => {
     try {
       if (a.provider === 'google') return await google(a, from, to);
       if (a.provider === 'microsoft') return await microsoft(a, from, to);
@@ -189,5 +191,5 @@ export async function fetchEvents(accounts: Account[], from: Date, to: Date): Pr
       return [];
     } catch (e: any) { errors.push(`${a.email}: ${e.message}`); return []; }
   }));
-  return { events: all.flat(), errors };
+  return { events: [...sample, ...all.flat()], errors };
 }

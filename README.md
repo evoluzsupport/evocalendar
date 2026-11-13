@@ -21,6 +21,15 @@ With no Zoho credentials, dev mode offers a demo login and sample meetings (neve
 
 See `.env.example` for every variable.
 
+## Google setup (Gmail / Google Workspace calendars)
+1. console.cloud.google.com → create/select a project → **APIs & Services → Library** → enable **Google Calendar API**.
+2. **OAuth consent screen**: choose External, fill app name and support email, add scope `.../auth/calendar.readonly`,
+   and while the app is in *Testing* add every Gmail address you will connect under **Test users**.
+3. **Credentials → Create credentials → OAuth client ID → Web application**.
+   Authorized redirect URI: `http://localhost:3000/api/oauth/callback` (and `<your-vercel-url>/api/oauth/callback` for production).
+4. Put the Client ID and Secret in `.env.local` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), restart `npm run dev`,
+   then Integration → Google Connect. For anyone outside your test users, Google requires app verification.
+
 ## How sync works
 Meetings are fetched live from each provider for the visible date range, on every navigation, every 30 s while open,
 and when the tab regains focus. Recurring events from CalDAV accounts show only their first instance.
