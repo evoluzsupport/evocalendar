@@ -17,7 +17,7 @@ async function freshToken(a: Account): Promise<string> {
   const c = cred(a.provider);
   const t = await tokenRequest(PROVIDERS[a.provider as ProviderId].tokenUrl!, { grant_type: 'refresh_token', refresh_token: a.refresh_token, client_id: c.clientId, client_secret: c.clientSecret });
   a.access_token = t.access_token; a.expires_at = Date.now() + (t.expires_in || 3600) * 1000;
-  await patchAccount(a.id, { access_token: a.access_token, expires_at: a.expires_at });
+  await patchAccount(a.id, { access_token: a.access_token, expires_at: a.expires_at }, a.user_id);
   return a.access_token!;
 }
 

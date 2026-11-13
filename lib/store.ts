@@ -1,7 +1,8 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { uuid } from './crypto';
+import { cookies } from 'next/headers';
+import { decrypt, encrypt, uuid } from './crypto';
 import { SKIP_LOGIN } from './config';
 
 export interface User { id: string; zoho_id: string; email: string; name: string }
@@ -37,6 +38,17 @@ function rd(): FileDb {
 }
 const wr = (d: FileDb) => { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.writeFileSync(FILE, JSON.stringify(d, null, 2)); };
 
+// ---------- Guest storage: encrypted cookie (no server storage; each browser keeps its own accounts) ----------
+const GUEST_ID = 'guest';
+const isGuest = (id: string) => id === GUEST_ID;
+type GuestData = { accounts: Account[]; settings?: Settings };
+async function gread(): Promise<GuestData> {
+  try { return JSON.parse(decrypt((await cookies()).get('evo_data')?.value || '')); } catch { return { accounts: [] }; }
+}
+async function gwrite(d: GuestData) {
+  (await cookies()).set('evo_data', encrypt(JSON.stringify(d)), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 24 * 30 });
+}
+
 // ---------- API ----------
 export async function upsertUser(zoho_id: string, email: string, name: string): Promise<User> {
   if (useSupabase) return (await sb('users?on_conflict=zoho_id', { method: 'POST', upsert: true, body: JSON.stringify({ zoho_id, email, name }) }))[0];
@@ -49,24 +61,33 @@ export async function getUser(id: string): Promise<User | null> {
   return rd().users.find(u => u.id === id) || null;
 }
 export async function listAccounts(user_id: string): Promise<Account[]> {
+  if (isGuest(user_id)) return (await gread()).accounts;
   if (useSupabase) return sb(`accounts?user_id=eq.${q(user_id)}&select=*&order=created_at`);
   return rd().accounts.filter(a => a.user_id === user_id);
 }
 export async function addAccount(a: Omit<Account, 'id'>): Promise<Account> {
+  if (isGuest(a.user_id)) {
+    const d = await gread(); let x = d.accounts.find(y => y.provider === a.provider && y.email === a.email);
+    if (x) Object.assign(x, a); else d.accounts.push((x = { id: uuid(), ...a }));
+    await gwrite(d); return x;
+  }
   if (useSupabase) return (await sb('accounts?on_conflict=user_id,provider,email', { method: 'POST', upsert: true, body: JSON.stringify(a) }))[0];
   const d = rd(); let x = d.accounts.find(y => y.user_id === a.user_id && y.provider === a.provider && y.email === a.email);
   if (x) Object.assign(x, a); else d.accounts.push((x = { id: uuid(), ...a }));
   wr(d); return x;
 }
-export async function patchAccount(id: string, patch: Partial<Account>) {
+export async function patchAccount(id: string, patch: Partial<Account>, user_id?: string) {
+  if (user_id && isGuest(user_id)) { const d = await gread(); const x = d.accounts.find(a => a.id === id); if (x) { Object.assign(x, patch); await gwrite(d); } return; }
   if (useSupabase) { await sb(`accounts?id=eq.${q(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }); return; }
   const d = rd(); const x = d.accounts.find(a => a.id === id); if (x) { Object.assign(x, patch); wr(d); }
 }
 export async function deleteAccount(user_id: string, id: string) {
+  if (isGuest(user_id)) { const d = await gread(); d.accounts = d.accounts.filter(a => a.id !== id); await gwrite(d); return; }
   if (useSupabase) { await sb(`accounts?id=eq.${q(id)}&user_id=eq.${q(user_id)}`, { method: 'DELETE' }); return; }
   const d = rd(); d.accounts = d.accounts.filter(a => !(a.id === id && a.user_id === user_id)); wr(d);
 }
 export async function getSettings(user_id: string): Promise<Settings> {
+  if (isGuest(user_id)) return (await gread()).settings || DEFAULTS;
   if (useSupabase) {
     const r = (await sb(`settings?user_id=eq.${q(user_id)}&select=*`))[0];
     return r ? { timezone: r.timezone, defaultView: r.default_view, syncFrequency: r.sync_frequency } : DEFAULTS;
@@ -75,6 +96,7 @@ export async function getSettings(user_id: string): Promise<Settings> {
 }
 export async function saveSettings(user_id: string, patch: Partial<Settings>): Promise<Settings> {
   const next = { ...(await getSettings(user_id)), ...patch };
+  if (isGuest(user_id)) { const d = await gread(); d.settings = next; await gwrite(d); return next; }
   if (useSupabase) {
     await sb('settings?on_conflict=user_id', { method: 'POST', upsert: true, body: JSON.stringify({ user_id, timezone: next.timezone, default_view: next.defaultView, sync_frequency: next.syncFrequency }) });
     return next;
