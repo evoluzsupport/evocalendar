@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import CalendarView from './CalendarView';
-import { COLORS, LABELS, Ev, api, fmtTime, sameDay, startOfDay, useEvents } from './shared';
+import { COLORS, LABELS, api, evColor, fmtTime, setPalette, startOfDay, sameDay, useEvents } from './shared';
 
 type Provider = { id: string; name: string; letter: string; desc: string; kind: 'oauth' | 'caldav'; caldavUrl?: string };
 type Account = { id: string; provider: string; email: string };
@@ -24,6 +24,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
 
+  setPalette(accounts); // per-account colours
   const toast = useCallback((m: string) => { setToastMsg(m); setTimeout(() => setToastMsg(''), 3200); }, []);
   const load = useCallback(async () => {
     const [p, a, s] = await Promise.all([api('/providers'), api('/accounts'), api('/settings')]);
@@ -38,10 +39,10 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
     if (q.size) history.replaceState(null, '', '/app');
   }, [load, toast]);
 
-  async function connect(p: Provider) {
+  async function connect(p: Provider, another = false) {
     if (p.kind === 'caldav') return setModal({ kind: 'caldav', preset: 'yahoo' });
     let start: any;
-    try { start = await api('/connect/' + p.id, 'POST'); } catch (e: any) { return toast(e.message); }
+    try { start = await api('/connect/' + p.id, 'POST', { another }); } catch (e: any) { return toast(e.message); }
     if (start.redirect) { window.location.href = start.redirect; return; }
     for (let step = 0; step < 4; step++) { setModal({ kind: 'connecting', p, step }); await new Promise(r => setTimeout(r, 600)); }
     const acct = await api<{ email: string }>('/connect/' + p.id + '/demo', 'POST');
@@ -73,7 +74,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
 
       <main>
         {page === 'dashboard' && <Dashboard count={accounts.length} enabled={loaded} onGo={setPage} />}
-        {page === 'calendar' && <CalendarView initialView={settings.defaultView} enabled={loaded} onToast={toast} />}
+        {page === 'calendar' && <CalendarView initialView={settings.defaultView} enabled={loaded} accounts={accounts} onToast={toast} />}
         {page === 'settings' && (
           <section>
             <div className="ph"><div><h1>Setting</h1><p>General preferences</p></div></div>
@@ -95,7 +96,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                   <div key={p.id} className="icard" onClick={() => on ? setModal({ kind: 'manage', p }) : connect(p)}>
                     <div className="ilogo" style={{ background: COLORS[p.id] }}>{p.letter}</div>
                     <h3>{p.name} Connect</h3><p>{p.desc}</p>
-                    {accts.map(a => <div key={a.id} className="connected-acct">{a.email}</div>)}
+                    {accts.map(a => <div key={a.id} className="connected-acct"><i className="cdot" style={{ background: evColor({ provider: a.provider, accountEmail: a.email }) }} />{a.email}</div>)}
                     <span className={'status' + (on ? ' on' : '')}>{on ? `Connected (${accts.length})` : 'Not connected'}</span>
                   </div>
                 );
@@ -103,7 +104,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
               <div className="icard add" onClick={() => setModal({ kind: 'caldav', preset: 'other' })}>
                 <div className="plus">+</div><h3>Add another email platform</h3>
                 <p>Hostinger, custom domain or any other CalDAV mailbox.</p>
-                {accounts.filter(a => a.provider === 'other').map(a => <div key={a.id} className="connected-acct">{a.email}</div>)}
+                {accounts.filter(a => a.provider === 'other').map(a => <div key={a.id} className="connected-acct"><i className="cdot" style={{ background: evColor({ provider: a.provider, accountEmail: a.email }) }} />{a.email}</div>)}
               </div>
             </div>
           </section>
@@ -124,7 +125,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                 ))}
               </div>
               <div className="actions"><button className="btn" onClick={() => setModal(null)}>Close</button>
-                <button className="btn primary" onClick={() => connect(modal.p)}>Add another account</button></div>
+                <button className="btn primary" onClick={() => connect(modal.p, true)}>Add another account</button></div>
             </>
           )}
           {modal?.kind === 'connecting' && (
@@ -185,8 +186,8 @@ function Dashboard({ count, enabled, onGo }: { count: number; enabled: boolean; 
       <div className="card list">
         <h3 style={{ margin: '0 0 6px' }}>Today</h3>
         {today.length ? today.map(e => (
-          <div className="row" key={e.id}><span className="bar" style={{ background: COLORS[e.provider] }} />
-            <span className="time">{e.allDay ? 'All day' : `${fmtTime(e.s)} - ${fmtTime(e.e2)}`}</span><b>{e.title}</b><span className="src">{LABELS[e.provider]}</span></div>
+          <div className="row" key={e.id}><span className="bar" style={{ background: evColor(e) }} />
+            <span className="time">{e.allDay ? 'All day' : `${fmtTime(e.s)} - ${fmtTime(e.e2)}`}</span><b>{e.title}</b><span className="src">{LABELS[e.provider]} · {e.accountEmail}</span></div>
         )) : (
           <p className="hint" style={{ padding: '12px 0' }}>
             {count ? 'No meetings today.' : <>No accounts connected yet. <a href="#" onClick={ev => { ev.preventDefault(); onGo('integration'); }}>Connect an account</a> to sync meetings.</>}

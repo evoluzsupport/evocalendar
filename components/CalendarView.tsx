@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { COLORS, LABELS, Ev, fmtTime, sameDay, startOfDay, useEvents } from './shared';
+import { COLORS, LABELS, Acct, Ev, acctKey, evColor, fmtTime, sameDay, startOfDay, useEvents } from './shared';
 
 export type View = 'Day' | 'Week' | 'Month' | 'Agenda';
 const HOUR_PX = 48;
@@ -33,7 +33,7 @@ function layout(list: (Ev & { s: Date; e2: Date })[]) {
   return out;
 }
 
-export default function CalendarView({ initialView, enabled, onToast }: { initialView: string; enabled: boolean; onToast: (m: string) => void }) {
+export default function CalendarView({ initialView, enabled, accounts, onToast }: { initialView: string; enabled: boolean; accounts: Acct[]; onToast: (m: string) => void }) {
   const [view, setView] = useState<View>((['Day', 'Week', 'Month', 'Agenda'].includes(initialView) ? initialView : 'Week') as View);
   const [cursor, setCursor] = useState(() => new Date());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -44,8 +44,7 @@ export default function CalendarView({ initialView, enabled, onToast }: { initia
 
   const [from, to, days] = rangeFor(view, cursor);
   const { events, syncedAt, errors, loading, refresh } = useEvents(from, to, enabled);
-  const present = useMemo(() => [...new Set(events.map(e => e.provider))], [events]);
-  const visible = events.filter(e => !hidden.has(e.provider));
+  const visible = events.filter(e => !hidden.has(acctKey(e.provider, e.accountEmail)));
 
   const step = (dir: number) => setCursor(c => view === 'Month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'Week' ? 7 : view === 'Day' ? 1 : 30)));
   const title = view === 'Month' ? cursor.toLocaleDateString([], { month: 'long', year: 'numeric' })
@@ -66,12 +65,16 @@ export default function CalendarView({ initialView, enabled, onToast }: { initia
 
       <div className="cal-meta">
         <div className="legend">
-          {present.length === 0 && <span className="hint">No meetings in this range.</span>}
-          {present.map(p => (
-            <button key={p} className={'chip' + (hidden.has(p) ? ' off' : '')} onClick={() => setHidden(h => { const n = new Set(h); n.has(p) ? n.delete(p) : n.add(p); return n; })}>
-              <i style={{ background: COLORS[p] }} />{LABELS[p] || p}
-            </button>
-          ))}
+          {accounts.length === 0 && <span className="hint">No accounts connected. Add one under Integration.</span>}
+          {accounts.length > 0 && events.length === 0 && !loading && <span className="hint">No meetings in this range.</span>}
+          {accounts.map(a => {
+            const k = acctKey(a.provider, a.email), n = events.filter(e => acctKey(e.provider, e.accountEmail) === k).length;
+            return (
+              <button key={a.id} title={a.email} className={'chip' + (hidden.has(k) ? ' off' : '')} onClick={() => setHidden(h => { const s = new Set(h); s.has(k) ? s.delete(k) : s.add(k); return s; })}>
+                <i style={{ background: evColor({ provider: a.provider, accountEmail: a.email }) }} />{LABELS[a.provider] || a.provider} · {a.email}<em>{n}</em>
+              </button>
+            );
+          })}
         </div>
         <div className="sync">
           <span className={'dot' + (loading ? ' spin' : '')} />
@@ -88,7 +91,7 @@ export default function CalendarView({ initialView, enabled, onToast }: { initia
       {open && (
         <div className="overlay show" onClick={e => { if (e.target === e.currentTarget) setOpen(null); }}>
           <div className="modal">
-            <h2><span className="ilogo" style={{ background: COLORS[open.provider], width: 32, height: 32, fontSize: 15 }}>{(LABELS[open.provider] || '?')[0]}</span>{open.title}</h2>
+            <h2><span className="ilogo" style={{ background: evColor(open), width: 32, height: 32, fontSize: 15 }}>{(LABELS[open.provider] || '?')[0]}</span>{open.title}</h2>
             <p className="sub">{open.allDay ? 'All day · ' + new Date(open.start).toLocaleDateString() : `${new Date(open.start).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}, ${fmtTime(new Date(open.start))} – ${fmtTime(new Date(open.end))}`}</p>
             <div className="perm"><div><b>Account:</b> {LABELS[open.provider]} · {open.accountEmail}</div>{open.location && <div><b>Location:</b> {open.location}</div>}</div>
             <div className="actions"><button className="btn" onClick={() => setOpen(null)}>Close</button></div>
@@ -116,7 +119,7 @@ function TimeGrid({ days, events, now, onOpen }: { days: Date[]; events: Ev[]; n
         <div className="allday-l">all-day</div>
         {days.map(d => (
           <div key={+d} className="allday">
-            {evs.filter(e => e.allDay && overlapsDay(e, d)).map(e => <button key={e.id} className="pill" style={{ background: COLORS[e.provider] }} onClick={() => onOpen(e)}>{e.title}</button>)}
+            {evs.filter(e => e.allDay && overlapsDay(e, d)).map(e => <button key={e.id} className="pill" style={{ background: evColor(e) }} onClick={() => onOpen(e)}>{e.title}</button>)}
           </div>
         ))}
       </div>
@@ -132,7 +135,7 @@ function TimeGrid({ days, events, now, onOpen }: { days: Date[]; events: Ev[]; n
                   const h = Math.max(20, (+ev.e2 - +ev.s) / 3600000 * HOUR_PX - 2);
                   return (
                     <button key={ev.id} className="tev" title={ev.title} onClick={() => onOpen(evs.find(x => x.id === ev.id)!)}
-                      style={{ top, height: h, left: `calc(${(col / n) * 100}% + 2px)`, width: `calc(${100 / n}% - 4px)`, background: COLORS[ev.provider] }}>
+                      style={{ top, height: h, left: `calc(${(col / n) * 100}% + 2px)`, width: `calc(${100 / n}% - 4px)`, background: evColor(ev) }}>
                       <b>{ev.title}</b>{h > 34 && <span>{fmtTime(ev.s)} – {fmtTime(ev.e2)}</span>}
                     </button>
                   );
@@ -157,7 +160,7 @@ function MonthGrid({ days, month, events, now, onOpen, onDay }: { days: Date[]; 
         return (
           <div key={+d} className={'mc' + (d.getMonth() !== month ? ' dim' : '') + (sameDay(d, now) ? ' today' : '')}>
             <button className="num" onClick={() => onDay(d)}>{d.getDate()}</button>
-            {list.slice(0, 3).map(e => <button key={e.id} className="mev" style={{ background: COLORS[e.provider] }} onClick={() => onOpen(e)}>{!e.allDay && fmtTime(e.s) + ' '}{e.title}</button>)}
+            {list.slice(0, 3).map(e => <button key={e.id} className="mev" style={{ background: evColor(e) }} onClick={() => onOpen(e)}>{!e.allDay && fmtTime(e.s) + ' '}{e.title}</button>)}
             {list.length > 3 && <button className="more" onClick={() => onDay(d)}>+{list.length - 3} more</button>}
           </div>
         );
@@ -177,7 +180,7 @@ function Agenda({ events, onOpen }: { events: Ev[]; onOpen: (e: Ev) => void }) {
           <h3 style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--muted)' }}>{new Date(day).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
           {list.map(e => (
             <div className="row" key={e.id} style={{ cursor: 'pointer' }} onClick={() => onOpen(e)}>
-              <span className="bar" style={{ background: COLORS[e.provider] }} />
+              <span className="bar" style={{ background: evColor(e) }} />
               <span className="time">{e.allDay ? 'All day' : `${fmtTime(e.s)} - ${fmtTime(e.e2)}`}</span><b>{e.title}</b>
               <span className="src">{LABELS[e.provider]} · {e.accountEmail}</span>
             </div>

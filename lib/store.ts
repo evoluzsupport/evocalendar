@@ -42,11 +42,23 @@ const wr = (d: FileDb) => { fs.mkdirSync(path.dirname(FILE), { recursive: true }
 const GUEST_ID = 'guest';
 const isGuest = (id: string) => id === GUEST_ID;
 type GuestData = { accounts: Account[]; settings?: Settings };
+// Stored in up to 4 chunked cookies (browsers cap one cookie at ~4KB). Access tokens are not stored (refreshed on demand).
+const CHUNK = 3500, MAX_CHUNKS = 4;
 async function gread(): Promise<GuestData> {
-  try { return JSON.parse(decrypt((await cookies()).get('evo_data')?.value || '')); } catch { return { accounts: [] }; }
+  try {
+    const jar = await cookies(); let blob = '';
+    for (let i = 0; i < MAX_CHUNKS; i++) blob += jar.get('evo_data' + i)?.value || '';
+    return JSON.parse(decrypt(blob));
+  } catch { return { accounts: [] }; }
 }
 async function gwrite(d: GuestData) {
-  (await cookies()).set('evo_data', encrypt(JSON.stringify(d)), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 24 * 30 });
+  const jar = await cookies(), blob = encrypt(JSON.stringify(d));
+  if (blob.length > CHUNK * MAX_CHUNKS) throw new Error('Too many accounts for guest mode. Disconnect one, or sign in with a real account.');
+  const o = { httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 24 * 30 };
+  for (let i = 0; i < MAX_CHUNKS; i++) {
+    const part = blob.slice(i * CHUNK, (i + 1) * CHUNK);
+    if (part) jar.set('evo_data' + i, part, o); else jar.set('evo_data' + i, '', { ...o, maxAge: 0 });
+  }
 }
 
 // ---------- API ----------
@@ -67,8 +79,9 @@ export async function listAccounts(user_id: string): Promise<Account[]> {
 }
 export async function addAccount(a: Omit<Account, 'id'>): Promise<Account> {
   if (isGuest(a.user_id)) {
-    const d = await gread(); let x = d.accounts.find(y => y.provider === a.provider && y.email === a.email);
-    if (x) Object.assign(x, a); else d.accounts.push((x = { id: uuid(), ...a }));
+    const d = await gread(); const slim = { ...a, access_token: null, expires_at: null };
+    let x = d.accounts.find(y => y.provider === a.provider && y.email === a.email);
+    if (x) Object.assign(x, slim); else d.accounts.push((x = { id: uuid(), ...slim }));
     await gwrite(d); return x;
   }
   if (useSupabase) return (await sb('accounts?on_conflict=user_id,provider,email', { method: 'POST', upsert: true, body: JSON.stringify(a) }))[0];

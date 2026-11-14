@@ -11,14 +11,18 @@ export async function tokenRequest(tokenUrl: string, body: Record<string, string
   return j;
 }
 
+const tokenCache = new Map<string, { t: string; exp: number }>(); // best effort, per server instance
 async function freshToken(a: Account): Promise<string> {
-  if (a.expires_at && Date.now() < a.expires_at - 60000) return a.access_token!;
-  if (!a.refresh_token) return a.access_token!;
+  const hit = tokenCache.get(a.id);
+  if (hit && Date.now() < hit.exp - 60000) return hit.t;
+  if (a.access_token && a.expires_at && Date.now() < a.expires_at - 60000) return a.access_token;
+  if (!a.refresh_token) { if (a.access_token) return a.access_token; throw new Error('Reconnect this account (no refresh token)'); }
   const c = cred(a.provider);
   const t = await tokenRequest(PROVIDERS[a.provider as ProviderId].tokenUrl!, { grant_type: 'refresh_token', refresh_token: a.refresh_token, client_id: c.clientId, client_secret: c.clientSecret });
-  a.access_token = t.access_token; a.expires_at = Date.now() + (t.expires_in || 3600) * 1000;
-  await patchAccount(a.id, { access_token: a.access_token, expires_at: a.expires_at }, a.user_id);
-  return a.access_token!;
+  const exp = Date.now() + (t.expires_in || 3600) * 1000;
+  tokenCache.set(a.id, { t: t.access_token, exp });
+  if (a.user_id !== 'guest') await patchAccount(a.id, { access_token: t.access_token, expires_at: exp }, a.user_id);
+  return t.access_token as string;
 }
 
 async function getJson(url: string, headers: Record<string, string>) {

@@ -6,6 +6,24 @@ export type Ev = { id: string; provider: string; accountEmail: string; title: st
 export const COLORS: Record<string, string> = { google: 'var(--google)', microsoft: 'var(--ms)', zoho: 'var(--zoho)', yahoo: 'var(--yahoo)', other: 'var(--other)' };
 export const LABELS: Record<string, string> = { google: 'Google', microsoft: 'Microsoft', zoho: 'Zoho', yahoo: 'Yahoo', other: 'Other' };
 
+// Each connected account gets its own colour: 1st account of a provider = brand colour, others = distinct shades.
+const SHADES: Record<string, string[]> = {
+  google: ['#1a73e8', '#0b3d91', '#2b9dd6', '#5b6ee1'],
+  microsoft: ['#0f6cbd', '#0a3a6b', '#2a8fa8', '#6b5bd2'],
+  zoho: ['#e42527', '#a31517', '#f06a3a', '#c2417a'],
+  yahoo: ['#6001d2', '#3b0a85', '#9b4dff', '#8a2f9e'],
+  other: ['#0b8a6a', '#056046', '#3aa655', '#127a8a'],
+};
+export type Acct = { id: string; provider: string; email: string };
+let palette: Record<string, string> = {};
+export const acctKey = (provider: string, email: string) => provider + '|' + email;
+/** Call whenever the account list changes. */
+export function setPalette(accounts: Acct[]) {
+  const count: Record<string, number> = {}; palette = {};
+  for (const a of accounts) { const i = (count[a.provider] = (count[a.provider] ?? -1) + 1); const s = SHADES[a.provider] || SHADES.other; palette[acctKey(a.provider, a.email)] = s[i % s.length]; }
+}
+export const evColor = (e: { provider: string; accountEmail: string }) => palette[acctKey(e.provider, e.accountEmail)] || (COLORS[e.provider] ?? COLORS.other);
+
 export async function api<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const res = await fetch('/api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
   const data = await res.json().catch(() => ({}));

@@ -18,7 +18,7 @@ export interface ProviderDef { name: string; letter: string; desc: string; kind:
 export const PROVIDERS: Record<ProviderId, ProviderDef> = {
   google: { name: 'Google', letter: 'G', kind: 'oauth', desc: 'Sync meetings from Gmail and Google Workspace calendars.', demoEmail: 'tfortest100@gmail.com',
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token',
-    scope: 'openid email https://www.googleapis.com/auth/calendar.readonly', extra: { access_type: 'offline', prompt: 'consent' } },
+    scope: 'openid email https://www.googleapis.com/auth/calendar.readonly', extra: { access_type: 'offline', prompt: 'select_account consent' } },
   microsoft: { name: 'Microsoft', letter: 'M', kind: 'oauth', desc: 'Sync meetings from Outlook, Hotmail and Microsoft 365.', demoEmail: 'test@outlook.com',
     authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize', tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
     scope: 'openid email offline_access User.Read Calendars.Read', extra: { prompt: 'select_account' } },
