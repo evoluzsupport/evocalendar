@@ -10,11 +10,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
   const id = (await params).provider as ProviderId;
   const p = PROVIDERS[id];
   if (!p || p.kind !== 'oauth') return NextResponse.json({ error: 'Unknown provider' }, { status: 404 });
-  const another = (await req.json().catch(() => ({}))).another === true;
   const c = cred(id);
   if (!c.clientId) {
     if (DEMO) return NextResponse.json({ demo: true });
     return NextResponse.json({ error: `${p.name} is not configured yet (missing ${id.toUpperCase()}_CLIENT_ID)` }, { status: 400 });
   }
-  return redirectWithState(p.authUrl!, { client_id: c.clientId, redirect_uri: `${BASE}/api/oauth/callback`, response_type: 'code', scope: p.scope!, ...p.extra, ...(another && id === 'zoho' ? { prompt: 'login' } : {}) }, { kind: 'connect', provider: id, uid: u.id });
+  return redirectWithState(p.authUrl!, { client_id: c.clientId, redirect_uri: `${BASE}/api/oauth/callback`, response_type: 'code', scope: p.scope!, ...p.extra, ...(id === 'zoho' ? { prompt: 'login' } : {}) }, { kind: 'connect', provider: id, uid: u.id });
 }

@@ -83,9 +83,11 @@ async function zoho(a: Account, from: Date, to: Date): Promise<CalEvent[]> {
   const windows: [Date, Date][] = [];
   for (let s = new Date(from); s < to; s = new Date(s.getTime() + 30 * 864e5)) windows.push([s, new Date(Math.min(+s + 30 * 864e5, +to))]);
   const out: CalEvent[] = [];
+  const failed: string[] = []; let requests = 0;
   await Promise.all(cals.flatMap((c: any) => windows.map(async ([s, e]) => {
+    requests++;
     const range = encodeURIComponent(JSON.stringify({ start: zfmt(s), end: zfmt(e) }));
-    const j = await getJson(`${ZOHO_CALENDAR}/api/v1/calendars/${c.uid}/events?range=${range}`, h).catch(() => ({ events: [] }));
+    const j = await getJson(`${ZOHO_CALENDAR}/api/v1/calendars/${c.uid}/events?range=${range}`, h).catch((err: Error) => { failed.push(`${c.name || c.uid}: ${err.message}`); return { events: [] }; });
     for (const ev of j.events || []) {
       const dt = ev.dateandtime || {};
       if (!dt.start) continue;
@@ -93,6 +95,7 @@ async function zoho(a: Account, from: Date, to: Date): Promise<CalEvent[]> {
         location: ev.location || undefined, ...(ev.isallday ? zohoAllDay(dt.start, dt.end) : { start: zohoDate(dt.start).toISOString(), end: zohoDate(dt.end || dt.start).toISOString() }) });
     }
   })));
+  if (requests && failed.length === requests) throw new Error('could not read any Zoho calendar (' + failed[0] + ')');
   return out;
 }
 
