@@ -16,8 +16,9 @@ export function withNonce(res: NextResponse, nonce: string) {
   return res;
 }
 export function readState<T = any>(req: NextRequest): T | null {
-  const s = verify<T & { nonce: string }>(req.nextUrl.searchParams.get('state') || '');
-  return s && s.nonce === req.cookies.get(NONCE)?.value ? s : null;
+  const s = verify<T & { nonce: string; remote?: boolean }>(req.nextUrl.searchParams.get('state') || '');
+  // "remote" links are opened in a different browser on purpose, so that browser has no nonce cookie: the signed, 10-minute state is the proof.
+  return s && (s.remote === true || s.nonce === req.cookies.get(NONCE)?.value) ? s : null;
 }
 export function idTokenClaims(t?: string): { email?: string; name?: string; sub?: string; preferred_username?: string } {
   try { return JSON.parse(Buffer.from(t!.split('.')[1], 'base64url').toString()); } catch { return {}; }

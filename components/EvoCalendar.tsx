@@ -6,7 +6,8 @@ import { COLORS, LABELS, api, evColor, fmtTime, setPalette, startOfDay, sameDay,
 type Provider = { id: string; name: string; letter: string; desc: string; kind: 'oauth' | 'caldav'; caldavUrl?: string };
 type Account = { id: string; provider: string; email: string };
 type Page = 'dashboard' | 'calendar' | 'settings' | 'integration';
-type Modal = null | { kind: 'manage'; p: Provider } | { kind: 'connecting'; p: Provider; step: number } | { kind: 'done'; p: Provider; email: string } | { kind: 'caldav'; preset: 'yahoo' | 'other' };
+type Modal = null | { kind: 'manage'; p: Provider } | { kind: 'connecting'; p: Provider; step: number } | { kind: 'done'; p: Provider; email: string } | { kind: 'caldav'; preset: 'yahoo' | 'other' }
+  | { kind: 'where'; p: Provider } | { kind: 'link'; p: Provider; url: string; count: number };
 
 const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z' },
@@ -39,10 +40,24 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
     if (q.size) history.replaceState(null, '', '/app');
   }, [load, toast]);
 
-  async function connect(p: Provider, another = false) {
+  // Poll while the "other browser" link is open; close as soon as a new account of that provider shows up.
+  const linkP = modal?.kind === 'link' ? modal.p.id : '', linkCount = modal?.kind === 'link' ? modal.count : 0;
+  useEffect(() => {
+    if (!linkP) return;
+    const t = setInterval(async () => {
+      try {
+        const a = await api<Account[]>('/accounts');
+        if (a.filter(x => x.provider === linkP).length > linkCount) { setAccounts(a); setModal(null); setPage('calendar'); toast('Account connected from the other browser. Syncing meetings…'); }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(t);
+  }, [linkP, linkCount, toast]);
+
+  async function connect(p: Provider, other = false) {
     if (p.kind === 'caldav') return setModal({ kind: 'caldav', preset: 'yahoo' });
     let start: any;
-    try { start = await api('/connect/' + p.id, 'POST', { another }); } catch (e: any) { return toast(e.message); }
+    try { start = await api('/connect/' + p.id, 'POST', { other }); } catch (e: any) { return toast(e.message); }
+    if (start.redirect && other) { setModal({ kind: 'link', p, url: start.redirect, count: accounts.filter(a => a.provider === p.id).length }); return; }
     if (start.redirect) { window.location.href = start.redirect; return; }
     for (let step = 0; step < 4; step++) { setModal({ kind: 'connecting', p, step }); await new Promise(r => setTimeout(r, 600)); }
     const acct = await api<{ email: string }>('/connect/' + p.id + '/demo', 'POST');
@@ -93,7 +108,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                 const accts = accounts.filter(a => a.provider === p.id);
                 const on = accts.length > 0;
                 return (
-                  <div key={p.id} className="icard" onClick={() => on ? setModal({ kind: 'manage', p }) : connect(p)}>
+                  <div key={p.id} className="icard" onClick={() => on ? setModal({ kind: 'manage', p }) : setModal({ kind: 'where', p })}>
                     <div className="ilogo" style={{ background: COLORS[p.id] }}>{p.letter}</div>
                     <h3>{p.name} Connect</h3><p>{p.desc}</p>
                     {accts.map(a => <div key={a.id} className="connected-acct"><i className="cdot" style={{ background: evColor({ provider: a.provider, accountEmail: a.email }) }} />{a.email}</div>)}
@@ -125,7 +140,29 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                 ))}
               </div>
               <div className="actions"><button className="btn" onClick={() => setModal(null)}>Close</button>
-                <button className="btn primary" onClick={() => connect(modal.p, true)}>Add another account</button></div>
+                <button className="btn primary" onClick={() => setModal({ kind: 'where', p: modal.p })}>Add another account</button></div>
+            </>
+          )}
+          {modal?.kind === 'where' && (
+            <>
+              <Head color={COLORS[modal.p.id]} letter={modal.p.letter} title={`Connect ${modal.p.name}`} />
+              <p className="sub">Which browser is the {modal.p.name} account signed in on?</p>
+              <div className="actions" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+                <button className="btn primary" onClick={() => connect(modal.p)}>This browser</button>
+                <button className="btn" onClick={() => connect(modal.p, true)}>Another browser or Chrome profile</button>
+                <button className="btn" onClick={() => setModal(null)}>Cancel</button>
+              </div>
+              <p className="hint">Choosing another browser gives you a link to open there, so you can authorize that account without signing out here.</p>
+            </>
+          )}
+          {modal?.kind === 'link' && (
+            <>
+              <Head color={COLORS[modal.p.id]} letter={modal.p.letter} title={`Connect ${modal.p.name} from another browser`} />
+              <p className="sub">Copy this link and open it in the other Chrome profile or browser. Sign in and allow access there. This page updates by itself when it is done.</p>
+              <div className="field"><input readOnly value={modal.url} onFocus={e => e.currentTarget.select()} /></div>
+              <p className="hint">The link is valid for 10 minutes. Only share it with yourself: whoever opens it can add their account to your calendar.</p>
+              <div className="actions"><button className="btn" onClick={() => setModal(null)}>Cancel</button>
+                <button className="btn primary" onClick={() => navigator.clipboard.writeText(modal.url).then(() => toast('Link copied'), () => toast('Copy failed: select the link and copy it'))}>Copy link</button></div>
             </>
           )}
           {modal?.kind === 'connecting' && (
