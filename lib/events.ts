@@ -1,6 +1,6 @@
 import { PROVIDERS, ProviderId, ZOHO_CALENDAR, cred, DEMO } from './config';
 import { decrypt } from './crypto';
-import { Account, patchAccount } from './store';
+import { Account, isCookieUser, patchAccount } from './store';
 
 export interface CalEvent { id: string; provider: string; accountEmail: string; title: string; start: string; end: string; allDay: boolean; location?: string }
 
@@ -21,7 +21,7 @@ async function freshToken(a: Account): Promise<string> {
   const t = await tokenRequest(PROVIDERS[a.provider as ProviderId].tokenUrl!, { grant_type: 'refresh_token', refresh_token: a.refresh_token, client_id: c.clientId, client_secret: c.clientSecret });
   const exp = Date.now() + (t.expires_in || 3600) * 1000;
   tokenCache.set(a.id, { t: t.access_token, exp });
-  if (a.user_id !== 'guest') await patchAccount(a.id, { access_token: t.access_token, expires_at: exp }, a.user_id);
+  if (!isCookieUser(a.user_id)) await patchAccount(a.id, { access_token: t.access_token, expires_at: exp }, a.user_id);
   return t.access_token as string;
 }
 

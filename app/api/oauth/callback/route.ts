@@ -4,7 +4,7 @@ import { tokenRequest } from '@/lib/events';
 import { idTokenClaims, readState } from '@/lib/oauth';
 import { currentUser } from '@/lib/session';
 import { encrypt } from '@/lib/crypto';
-import { addAccount, getUser } from '@/lib/store';
+import { addAccount, getUser, isCookieUser } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   if (remote) {
     // Different browser: no session cookie here. The signed state names the user who generated the link.
     // Guests have no server storage: handled below by handing back an encrypted connection code.
-    if (st.uid !== 'guest' && !(await getUser(st.uid))) return back({ error: 'Connection expired. Please try again.' });
+    if (!isCookieUser(st.uid) && !(await getUser(st.uid))) return back({ error: 'Connection expired. Please try again.' });
     uid = st.uid;
   } else {
     const user = await currentUser();
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     const claims = idTokenClaims(t.id_token);
     const email = claims.email || claims.preferred_username;
     if (!email) throw new Error('Could not read the account email');
-    if (remote && uid === 'guest') {
+    if (remote && isCookieUser(uid)) {
       if (!t.refresh_token) throw new Error('The provider did not allow long-term access. Remove EvoCalendar from your account permissions and try again.');
       return codePage(email, encrypt(JSON.stringify({ provider: st.provider, email, refresh_token: t.refresh_token, exp: Date.now() + 10 * 60000 })));
     }

@@ -159,8 +159,15 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
           {modal?.kind === 'link' && (
             <>
               <Head color={COLORS[modal.p.id]} letter={modal.p.letter} title={`Connect ${modal.p.name} from another browser`} />
-              <p className="sub">Copy this link and open it in the other Chrome profile or browser. Sign in and allow access there. {modal.paste ? 'That page will then show a connection code: paste it below.' : 'This page updates by itself when it is done.'}</p>
-              <div className="field"><input readOnly value={modal.url} onFocus={e => e.currentTarget.select()} /></div>
+              <ol className="guide">
+                <li><div><b>Copy the link</b><span>Use the link below, or press “Copy link”.</span></div></li>
+                <li><div><b>Open it in the other browser</b><span>Open that Chrome profile or browser where your {modal.p.name} account is signed in, click the address bar, paste the link and press Enter.</span></div></li>
+                <li><div><b>Pick the account and allow access</b><span>Choose the {modal.p.name} account you want, then click Allow.</span></div></li>
+                {modal.paste
+                  ? <li><div><b>Copy the code it shows</b><span>The page says “Almost done” and shows a long code. Press “Copy code”, come back to this tab and paste it below.</span></div></li>
+                  : <li><div><b>Come back here</b><span>This page updates by itself once the account is connected.</span></div></li>}
+              </ol>
+              <div className="field"><label>Link to open in the other browser</label><input readOnly value={modal.url} onFocus={e => e.currentTarget.select()} /></div>
               {modal.paste && <PasteCode onDone={async email => { setModal(null); await load(); setPage('calendar'); toast('Connected: ' + email + '. Syncing meetings…'); }} />}
               <p className="hint">The link is valid for 10 minutes. Only share it with yourself: whoever opens it can add their account to your calendar.</p>
               <div className="actions"><button className="btn" onClick={() => setModal(null)}>Cancel</button>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { BASE, DEMO, PROVIDERS, ProviderId, cred } from '@/lib/config';
 import { redirectWithState } from '@/lib/oauth';
 import { isRes, requireUser } from '@/lib/session';
+import { isCookieUser } from '@/lib/store';
 
 // Starts connecting an OAuth mailbox (Google / Microsoft / Zoho). Returns the provider's sign-in URL.
 // Body { other: true } = the link will be opened in a different browser / profile (returned for the user to copy).
@@ -19,5 +20,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
   }
   // Guest accounts live in this browser's cookie, so the other browser can't save them: it shows a connection code to paste back here instead.
   return redirectWithState(p.authUrl!, { client_id: c.clientId, redirect_uri: `${BASE}/api/oauth/callback`, response_type: 'code', scope: p.scope!, ...p.extra, ...(id === 'zoho' ? { prompt: 'login' } : {}) },
-    { kind: 'connect', provider: id, uid: u.id, ...(other ? { remote: true } : {}) }, { paste: other && u.id === 'guest' });
+    { kind: 'connect', provider: id, uid: u.id, ...(other ? { remote: true } : {}) }, { paste: other && isCookieUser(u.id) });
 }

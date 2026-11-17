@@ -39,19 +39,23 @@ function rd(): FileDb {
 const wr = (d: FileDb) => { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.writeFileSync(FILE, JSON.stringify(d, null, 2)); };
 
 // ---------- Guest storage: encrypted cookie (no server storage; each browser keeps its own accounts) ----------
-const GUEST_ID = 'guest';
-const isGuest = (id: string) => id === GUEST_ID;
-type GuestData = { accounts: Account[]; settings?: Settings };
+// Used for the guest user and for Zoho users when no database is configured (their ids start with "z:").
+// The blob records its owner so that a different user signing in on the same browser never sees it.
+const isGuest = (id: string) => id === 'guest' || id.startsWith('z:');
+export const isCookieUser = isGuest;
+type GuestData = { accounts: Account[]; settings?: Settings; owner?: string };
 // Stored in up to 4 chunked cookies (browsers cap one cookie at ~4KB). Access tokens are not stored (refreshed on demand).
 const CHUNK = 3500, MAX_CHUNKS = 4;
-async function gread(): Promise<GuestData> {
+async function gread(uid: string): Promise<GuestData> {
   try {
     const jar = await cookies(); let blob = '';
     for (let i = 0; i < MAX_CHUNKS; i++) blob += jar.get('evo_data' + i)?.value || '';
-    return JSON.parse(decrypt(blob));
+    const d: GuestData = JSON.parse(decrypt(blob));
+    return (d.owner || 'guest') === uid ? d : { accounts: [] };
   } catch { return { accounts: [] }; }
 }
-async function gwrite(d: GuestData) {
+async function gwrite(d: GuestData, uid: string) {
+  d.owner = uid;
   const jar = await cookies(), blob = encrypt(JSON.stringify(d));
   if (blob.length > CHUNK * MAX_CHUNKS) throw new Error('Too many accounts for guest mode. Disconnect one, or sign in with a real account.');
   const o = { httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 24 * 30 };
@@ -73,16 +77,16 @@ export async function getUser(id: string): Promise<User | null> {
   return rd().users.find(u => u.id === id) || null;
 }
 export async function listAccounts(user_id: string): Promise<Account[]> {
-  if (isGuest(user_id)) return (await gread()).accounts;
+  if (isGuest(user_id)) return (await gread(user_id)).accounts;
   if (useSupabase) return sb(`accounts?user_id=eq.${q(user_id)}&select=*&order=created_at`);
   return rd().accounts.filter(a => a.user_id === user_id);
 }
 export async function addAccount(a: Omit<Account, 'id'>): Promise<Account> {
   if (isGuest(a.user_id)) {
-    const d = await gread(); const slim = { ...a, access_token: null, expires_at: null };
+    const d = await gread(a.user_id); const slim = { ...a, access_token: null, expires_at: null };
     let x = d.accounts.find(y => y.provider === a.provider && y.email === a.email);
     if (x) Object.assign(x, slim); else d.accounts.push((x = { id: uuid(), ...slim }));
-    await gwrite(d); return x;
+    await gwrite(d, a.user_id); return x;
   }
   if (useSupabase) return (await sb('accounts?on_conflict=user_id,provider,email', { method: 'POST', upsert: true, body: JSON.stringify(a) }))[0];
   const d = rd(); let x = d.accounts.find(y => y.user_id === a.user_id && y.provider === a.provider && y.email === a.email);
@@ -90,17 +94,17 @@ export async function addAccount(a: Omit<Account, 'id'>): Promise<Account> {
   wr(d); return x;
 }
 export async function patchAccount(id: string, patch: Partial<Account>, user_id?: string) {
-  if (user_id && isGuest(user_id)) { const d = await gread(); const x = d.accounts.find(a => a.id === id); if (x) { Object.assign(x, patch); await gwrite(d); } return; }
+  if (user_id && isGuest(user_id)) { const d = await gread(user_id); const x = d.accounts.find(a => a.id === id); if (x) { Object.assign(x, patch); await gwrite(d, user_id); } return; }
   if (useSupabase) { await sb(`accounts?id=eq.${q(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }); return; }
   const d = rd(); const x = d.accounts.find(a => a.id === id); if (x) { Object.assign(x, patch); wr(d); }
 }
 export async function deleteAccount(user_id: string, id: string) {
-  if (isGuest(user_id)) { const d = await gread(); d.accounts = d.accounts.filter(a => a.id !== id); await gwrite(d); return; }
+  if (isGuest(user_id)) { const d = await gread(user_id); d.accounts = d.accounts.filter(a => a.id !== id); await gwrite(d, user_id); return; }
   if (useSupabase) { await sb(`accounts?id=eq.${q(id)}&user_id=eq.${q(user_id)}`, { method: 'DELETE' }); return; }
   const d = rd(); d.accounts = d.accounts.filter(a => !(a.id === id && a.user_id === user_id)); wr(d);
 }
 export async function getSettings(user_id: string): Promise<Settings> {
-  if (isGuest(user_id)) return (await gread()).settings || DEFAULTS;
+  if (isGuest(user_id)) return (await gread(user_id)).settings || DEFAULTS;
   if (useSupabase) {
     const r = (await sb(`settings?user_id=eq.${q(user_id)}&select=*`))[0];
     return r ? { timezone: r.timezone, defaultView: r.default_view, syncFrequency: r.sync_frequency } : DEFAULTS;
@@ -109,7 +113,7 @@ export async function getSettings(user_id: string): Promise<Settings> {
 }
 export async function saveSettings(user_id: string, patch: Partial<Settings>): Promise<Settings> {
   const next = { ...(await getSettings(user_id)), ...patch };
-  if (isGuest(user_id)) { const d = await gread(); d.settings = next; await gwrite(d); return next; }
+  if (isGuest(user_id)) { const d = await gread(user_id); d.settings = next; await gwrite(d, user_id); return next; }
   if (useSupabase) {
     await sb('settings?on_conflict=user_id', { method: 'POST', upsert: true, body: JSON.stringify({ user_id, timezone: next.timezone, default_view: next.defaultView, sync_frequency: next.syncFrequency }) });
     return next;
