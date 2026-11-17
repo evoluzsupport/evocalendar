@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
     if (DEMO) return NextResponse.json({ demo: true });
     return NextResponse.json({ error: `${p.name} is not configured yet (missing ${id.toUpperCase()}_CLIENT_ID)` }, { status: 400 });
   }
-  if (other && u.id === 'guest') return NextResponse.json({ error: 'Connecting from another browser needs a real sign-in. Guest accounts are stored in this browser only.' }, { status: 400 });
+  // Guest accounts live in this browser's cookie, so the other browser can't save them: it shows a connection code to paste back here instead.
   return redirectWithState(p.authUrl!, { client_id: c.clientId, redirect_uri: `${BASE}/api/oauth/callback`, response_type: 'code', scope: p.scope!, ...p.extra, ...(id === 'zoho' ? { prompt: 'login' } : {}) },
-    { kind: 'connect', provider: id, uid: u.id, ...(other ? { remote: true } : {}) });
+    { kind: 'connect', provider: id, uid: u.id, ...(other ? { remote: true } : {}) }, { paste: other && u.id === 'guest' });
 }

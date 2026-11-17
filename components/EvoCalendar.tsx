@@ -7,7 +7,7 @@ type Provider = { id: string; name: string; letter: string; desc: string; kind: 
 type Account = { id: string; provider: string; email: string };
 type Page = 'dashboard' | 'calendar' | 'settings' | 'integration';
 type Modal = null | { kind: 'manage'; p: Provider } | { kind: 'connecting'; p: Provider; step: number } | { kind: 'done'; p: Provider; email: string } | { kind: 'caldav'; preset: 'yahoo' | 'other' }
-  | { kind: 'where'; p: Provider; err?: string } | { kind: 'link'; p: Provider; url: string; count: number };
+  | { kind: 'where'; p: Provider; err?: string } | { kind: 'link'; p: Provider; url: string; count: number; paste: boolean };
 
 const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z' },
@@ -57,7 +57,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
     if (p.kind === 'caldav') return setModal({ kind: 'caldav', preset: 'yahoo' });
     let start: any;
     try { start = await api('/connect/' + p.id, 'POST', { other }); } catch (e: any) { if (other) return setModal({ kind: 'where', p, err: e.message }); return toast(e.message); }
-    if (start.redirect && other) { setModal({ kind: 'link', p, url: start.redirect, count: accounts.filter(a => a.provider === p.id).length }); return; }
+    if (start.redirect && other) { setModal({ kind: 'link', p, url: start.redirect, count: accounts.filter(a => a.provider === p.id).length, paste: !!start.paste }); return; }
     if (start.redirect) { window.location.href = start.redirect; return; }
     for (let step = 0; step < 4; step++) { setModal({ kind: 'connecting', p, step }); await new Promise(r => setTimeout(r, 600)); }
     const acct = await api<{ email: string }>('/connect/' + p.id + '/demo', 'POST');
@@ -159,8 +159,9 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
           {modal?.kind === 'link' && (
             <>
               <Head color={COLORS[modal.p.id]} letter={modal.p.letter} title={`Connect ${modal.p.name} from another browser`} />
-              <p className="sub">Copy this link and open it in the other Chrome profile or browser. Sign in and allow access there. This page updates by itself when it is done.</p>
+              <p className="sub">Copy this link and open it in the other Chrome profile or browser. Sign in and allow access there. {modal.paste ? 'That page will then show a connection code: paste it below.' : 'This page updates by itself when it is done.'}</p>
               <div className="field"><input readOnly value={modal.url} onFocus={e => e.currentTarget.select()} /></div>
+              {modal.paste && <PasteCode onDone={async email => { setModal(null); await load(); setPage('calendar'); toast('Connected: ' + email + '. Syncing meetings…'); }} />}
               <p className="hint">The link is valid for 10 minutes. Only share it with yourself: whoever opens it can add their account to your calendar.</p>
               <div className="actions"><button className="btn" onClick={() => setModal(null)}>Cancel</button>
                 <button className="btn primary" onClick={() => navigator.clipboard.writeText(modal.url).then(() => toast('Link copied'), () => toast('Copy failed: select the link and copy it'))}>Copy link</button></div>
@@ -190,6 +191,21 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
       </div>
       <div className={'toast' + (toastMsg ? ' show' : '')}>{toastMsg}</div>
     </div>
+  );
+}
+
+function PasteCode({ onDone }: { onDone: (email: string) => void }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  return (
+    <div className="field"><label>Connection code</label>
+      <textarea rows={3} value={code} onChange={e => setCode(e.target.value)} placeholder="Paste the code from the other browser" style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace', fontSize: 12 }} />
+      {err && <p className="err">{err}</p>}
+      <button className="btn primary" disabled={busy || !code.trim()} onClick={async () => {
+        setBusy(true); setErr('');
+        try { onDone((await api<{ email: string }>('/accounts/import', 'POST', { code })).email); } catch (e: any) { setErr(e.message); setBusy(false); }
+      }}>{busy ? 'Adding…' : 'Add account'}</button></div>
   );
 }
 
