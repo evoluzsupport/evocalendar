@@ -9,7 +9,8 @@ const mondayOf = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
 
 function rangeFor(view: View, cursor: Date): [Date, Date, Date[]] {
   if (view === 'Day') { const s = startOfDay(cursor); return [s, addDays(s, 1), [s]]; }
-  if (view === 'Week') { const s = mondayOf(cursor); return [s, addDays(s, 7), [...Array(7)].map((_, i) => addDays(s, i))]; }
+  // Rolling week starting at the selected day (today by default), so past days are not shown first.
+  if (view === 'Week') { const s = startOfDay(cursor); return [s, addDays(s, 7), [...Array(7)].map((_, i) => addDays(s, i))]; }
   if (view === 'Month') {
     const s = mondayOf(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
     return [s, addDays(s, 42), [...Array(42)].map((_, i) => addDays(s, i))];

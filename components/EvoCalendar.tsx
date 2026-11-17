@@ -94,7 +94,8 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
           <section>
             <div className="ph"><div><h1>Setting</h1><p>General preferences</p></div></div>
             <div className="card">
-              <Row title="Time zone" sub="Used to display all meetings" value={settings.timezone} onChange={v => updateSetting('timezone', v)} opts={['Asia/Kolkata', 'UTC', 'Europe/London', 'America/New_York']} />
+              <div className="form-row"><div><b>Time zone</b><small>Detected automatically from your device; all meetings are shown in it</small></div>
+                <span>{(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'UTC'; } })()}</span></div>
               <Row title="Default calendar view" sub="Opens this view in My Calendar" value={settings.defaultView} onChange={v => updateSetting('defaultView', v)} opts={['Week', 'Day', 'Month', 'Agenda']} />
               <Row title="Sync frequency" sub="Meetings also refresh automatically every 30 seconds while the calendar is open" value={settings.syncFrequency} onChange={v => updateSetting('syncFrequency', v)} opts={['Every 5 minutes', 'Every 15 minutes', 'Every 30 minutes']} />
             </div>
@@ -230,7 +231,7 @@ function Row({ title, sub, value, onChange, opts }: { title: string; sub?: strin
 function Dashboard({ count, enabled, onGo }: { count: number; enabled: boolean; onGo: (p: Page) => void }) {
   const now = new Date();
   const [from, to] = useMemo(() => {
-    const s = startOfDay(new Date()); s.setDate(s.getDate() - ((s.getDay() + 6) % 7));
+    const s = startOfDay(new Date());
     const e = new Date(s); e.setDate(e.getDate() + 7); return [s, e];
   }, []);
   const { events } = useEvents(from, to, enabled);
@@ -241,7 +242,7 @@ function Dashboard({ count, enabled, onGo }: { count: number; enabled: boolean; 
       <div className="ph"><div><h1>Dashboard</h1><p>Your meetings from every connected account</p></div></div>
       <div className="stats">
         <div className="card stat"><div className="l">Meetings today</div><div className="n">{today.length}</div></div>
-        <div className="card stat"><div className="l">This week</div><div className="n">{evs.length}</div></div>
+        <div className="card stat"><div className="l">Next 7 days</div><div className="n">{evs.length}</div></div>
         <div className="card stat"><div className="l">Connected accounts</div><div className="n">{count}</div></div>
       </div>
       <div className="card list">
