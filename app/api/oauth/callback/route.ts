@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     const email = claims.email || claims.preferred_username;
     if (!email) throw new Error('Could not read the account email');
     if (remote && isCookieUser(uid)) {
-      if (!t.refresh_token) throw new Error('The provider did not allow long-term access. Remove EvoCalendar from your account permissions and try again.');
+      if (!t.refresh_token) throw new Error(`${PROVIDERS[st.provider].name} did not grant long-term access. Open the link again and press Allow on the consent screen. If it still fails, remove EvoCalendar from that account's connected apps and retry.`);
       return codePage(email, encrypt(JSON.stringify({ provider: st.provider, email, refresh_token: t.refresh_token, exp: Date.now() + 10 * 60000 })));
     }
     await addAccount({ user_id: uid, provider: st.provider, email, access_token: t.access_token, refresh_token: t.refresh_token || null, expires_at: Date.now() + (t.expires_in || 3600) * 1000 });

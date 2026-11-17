@@ -19,6 +19,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
     return NextResponse.json({ error: `${p.name} is not configured yet (missing ${id.toUpperCase()}_CLIENT_ID)` }, { status: 400 });
   }
   // Guest accounts live in this browser's cookie, so the other browser can't save them: it shows a connection code to paste back here instead.
-  return redirectWithState(p.authUrl!, { client_id: c.clientId, redirect_uri: `${BASE}/api/oauth/callback`, response_type: 'code', scope: p.scope!, ...p.extra, ...(id === 'zoho' ? { prompt: 'login' } : {}) },
+  return redirectWithState(p.authUrl!, { client_id: c.clientId, redirect_uri: `${BASE}/api/oauth/callback`, response_type: 'code', scope: p.scope!, ...p.extra }, // Zoho only issues a refresh token with prompt=consent (from p.extra), so don't override it
     { kind: 'connect', provider: id, uid: u.id, ...(other ? { remote: true } : {}) }, { paste: other && isCookieUser(u.id) });
 }
