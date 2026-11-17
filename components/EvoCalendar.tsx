@@ -7,7 +7,7 @@ type Provider = { id: string; name: string; letter: string; desc: string; kind: 
 type Account = { id: string; provider: string; email: string };
 type Page = 'dashboard' | 'calendar' | 'settings' | 'integration';
 type Modal = null | { kind: 'manage'; p: Provider } | { kind: 'connecting'; p: Provider; step: number } | { kind: 'done'; p: Provider; email: string } | { kind: 'caldav'; preset: 'yahoo' | 'other' }
-  | { kind: 'where'; p: Provider } | { kind: 'link'; p: Provider; url: string; count: number };
+  | { kind: 'where'; p: Provider; err?: string } | { kind: 'link'; p: Provider; url: string; count: number };
 
 const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z' },
@@ -56,7 +56,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
   async function connect(p: Provider, other = false) {
     if (p.kind === 'caldav') return setModal({ kind: 'caldav', preset: 'yahoo' });
     let start: any;
-    try { start = await api('/connect/' + p.id, 'POST', { other }); } catch (e: any) { return toast(e.message); }
+    try { start = await api('/connect/' + p.id, 'POST', { other }); } catch (e: any) { if (other) return setModal({ kind: 'where', p, err: e.message }); return toast(e.message); }
     if (start.redirect && other) { setModal({ kind: 'link', p, url: start.redirect, count: accounts.filter(a => a.provider === p.id).length }); return; }
     if (start.redirect) { window.location.href = start.redirect; return; }
     for (let step = 0; step < 4; step++) { setModal({ kind: 'connecting', p, step }); await new Promise(r => setTimeout(r, 600)); }
@@ -152,6 +152,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                 <button className="btn" onClick={() => connect(modal.p, true)}>Another browser or Chrome profile</button>
                 <button className="btn" onClick={() => setModal(null)}>Cancel</button>
               </div>
+              {modal.err && <p className="err">{modal.err}</p>}
               <p className="hint">Choosing another browser gives you a link to open there, so you can authorize that account without signing out here.</p>
             </>
           )}
