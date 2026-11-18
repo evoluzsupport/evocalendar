@@ -7,7 +7,7 @@ type Provider = { id: string; name: string; letter: string; desc: string; kind: 
 type Account = { id: string; provider: string; email: string };
 type Page = 'dashboard' | 'calendar' | 'settings' | 'integration';
 type Modal = null | { kind: 'manage'; p: Provider } | { kind: 'connecting'; p: Provider; step: number } | { kind: 'done'; p: Provider; email: string } | { kind: 'caldav'; preset: 'yahoo' | 'other' }
-  | { kind: 'where'; p: Provider; err?: string } | { kind: 'link'; p: Provider; url: string; count: number; paste: boolean };
+  | { kind: 'share' } | { kind: 'where'; p: Provider; err?: string } | { kind: 'link'; p: Provider; url: string; count: number; paste: boolean };
 
 const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z' },
@@ -89,7 +89,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
 
       <main>
         {page === 'dashboard' && <Dashboard count={accounts.length} enabled={loaded} onGo={setPage} />}
-        {page === 'calendar' && <CalendarView initialView={settings.defaultView} enabled={loaded} accounts={accounts} onToast={toast} />}
+        {page === 'calendar' && <CalendarView initialView={settings.defaultView} enabled={loaded} accounts={accounts} onToast={toast} onShare={() => setModal({ kind: 'share' })} />}
         {page === 'settings' && (
           <section>
             <div className="ph"><div><h1>Setting</h1><p>General preferences</p></div></div>
@@ -144,6 +144,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                 <button className="btn primary" onClick={() => setModal({ kind: 'where', p: modal.p })}>Add another account</button></div>
             </>
           )}
+          {modal?.kind === 'share' && <ShareForm onClose={() => setModal(null)} onToast={toast} />}
           {modal?.kind === 'where' && (
             <>
               <Head color={COLORS[modal.p.id]} letter={modal.p.letter} title={`Connect ${modal.p.name}`} />
@@ -199,6 +200,34 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
       </div>
       <div className={'toast' + (toastMsg ? ' show' : '')}>{toastMsg}</div>
     </div>
+  );
+}
+
+function ShareForm({ onClose, onToast }: { onClose: () => void; onToast: (m: string) => void }) {
+  const [days, setDays] = useState('7');
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  return (
+    <>
+      <h2>Share your calendar</h2>
+      <p className="sub">Create a read-only link. Anyone who has it can see the full details of every meeting from all your connected accounts, but cannot change anything.</p>
+      <div className="field"><label>Link expires after</label>
+        <select value={days} onChange={e => { setDays(e.target.value); setUrl(''); }}>
+          {[['1', '1 day'], ['7', '7 days'], ['30', '30 days'], ['90', '90 days']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select></div>
+      {url && <div className="field"><label>Share this link</label><input readOnly value={url} onFocus={e => e.currentTarget.select()} /></div>}
+      {err && <p className="err">{err}</p>}
+      <p className="hint">Send the link only to people you trust. It cannot be revoked individually before it expires.</p>
+      <div className="actions"><button className="btn" onClick={onClose}>Close</button>
+        {url
+          ? <button className="btn primary" onClick={() => navigator.clipboard.writeText(url).then(() => onToast('Link copied'), () => onToast('Copy failed: select the link and copy it'))}>Copy link</button>
+          : <button className="btn primary" disabled={busy} onClick={async () => {
+              setBusy(true); setErr('');
+              try { setUrl((await api<{ url: string }>('/share', 'POST', { days: Number(days) })).url); } catch (e: any) { setErr(e.message); }
+              setBusy(false);
+            }}>{busy ? 'Creating…' : 'Create link'}</button>}</div>
+    </>
   );
 }
 

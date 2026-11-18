@@ -27,7 +27,7 @@ export const evColor = (e: { provider: string; accountEmail: string }) => palett
 export async function api<T = any>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const res = await fetch('/api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401) { window.location.href = '/'; throw new Error('Signed out'); }
+  if (res.status === 401 && !path.startsWith('/share')) { window.location.href = '/'; throw new Error('Signed out'); }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
@@ -37,19 +37,19 @@ export const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString
 export const startOfDay = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 
 /** Live events for a range: refetches on range change, every 30s, and when the tab regains focus. */
-export function useEvents(from: Date, to: Date, enabled = true, intervalMs = 30000) {
+export function useEvents(from: Date, to: Date, enabled = true, intervalMs = 30000, path = '/events') {
   const [events, setEvents] = useState<Ev[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [syncedAt, setSyncedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
-  const key = `${+from}-${+to}`;
+  const key = `${path}-${+from}-${+to}`;
   const seq = useRef(0);
 
   const refresh = useCallback(async () => {
     const id = ++seq.current;
     setLoading(true);
     try {
-      const r = await api(`/events?from=${from.toISOString()}&to=${to.toISOString()}`);
+      const r = await api(`${path}?from=${from.toISOString()}&to=${to.toISOString()}`);
       if (id !== seq.current) return;
       setEvents(r.events); setErrors(r.errors || []); setSyncedAt(new Date(r.syncedAt));
     } catch { /* keep showing the last good data */ }

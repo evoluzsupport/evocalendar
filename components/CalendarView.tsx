@@ -34,7 +34,7 @@ function layout(list: (Ev & { s: Date; e2: Date })[]) {
   return out;
 }
 
-export default function CalendarView({ initialView, enabled, accounts, onToast }: { initialView: string; enabled: boolean; accounts: Acct[]; onToast: (m: string) => void }) {
+export default function CalendarView({ initialView, enabled, accounts, onToast, onShare, title: pageTitle = 'My Calendar', eventsPath }: { initialView: string; enabled: boolean; accounts: Acct[]; onToast: (m: string) => void; onShare?: () => void; title?: string; eventsPath?: string }) {
   const [view, setView] = useState<View>((['Day', 'Week', 'Month', 'Agenda'].includes(initialView) ? initialView : 'Week') as View);
   const [cursor, setCursor] = useState(() => new Date());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -44,7 +44,7 @@ export default function CalendarView({ initialView, enabled, accounts, onToast }
   useEffect(() => { setView((['Day', 'Week', 'Month', 'Agenda'].includes(initialView) ? initialView : 'Week') as View); }, [initialView]);
 
   const [from, to, days] = rangeFor(view, cursor);
-  const { events, syncedAt, errors, loading, refresh } = useEvents(from, to, enabled);
+  const { events, syncedAt, errors, loading, refresh } = useEvents(from, to, enabled, 30000, eventsPath);
   const visible = events.filter(e => !hidden.has(acctKey(e.provider, e.accountEmail)));
 
   const step = (dir: number) => setCursor(c => view === 'Month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'Week' ? 7 : view === 'Day' ? 1 : 30)));
@@ -55,8 +55,9 @@ export default function CalendarView({ initialView, enabled, accounts, onToast }
   return (
     <section>
       <div className="ph">
-        <div><h1>My Calendar</h1><p>{title}</p></div>
+        <div><h1>{pageTitle}</h1><p>{title}</p></div>
         <div className="cal-tools">
+          {onShare && <button className="btn" onClick={onShare}>Share</button>}
           <button className="btn" onClick={() => step(-1)}>‹</button>
           <button className="btn" onClick={() => setCursor(new Date())}>Today</button>
           <button className="btn" onClick={() => step(1)}>›</button>
@@ -66,7 +67,7 @@ export default function CalendarView({ initialView, enabled, accounts, onToast }
 
       <div className="cal-meta">
         <div className="legend">
-          {accounts.length === 0 && <span className="hint">No accounts connected. Add one under Integration.</span>}
+          {accounts.length === 0 && <span className="hint">{onShare ? 'No accounts connected. Add one under Integration.' : 'No calendars to show.'}</span>}
           {accounts.length > 0 && events.length === 0 && !loading && <span className="hint">No meetings in this range.</span>}
           {accounts.map(a => {
             const k = acctKey(a.provider, a.email), n = events.filter(e => acctKey(e.provider, e.accountEmail) === k).length;
