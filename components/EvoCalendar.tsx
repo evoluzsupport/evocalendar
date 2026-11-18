@@ -1,7 +1,7 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CalendarView from './CalendarView';
-import { COLORS, LABELS, api, evColor, fmtTime, setPalette, startOfDay, sameDay, useEvents } from './shared';
+import { COLORS, LABELS, SharedCal, api, evColor, fmtTime, setPalette, sharedColor, startOfDay, sameDay, useEvents } from './shared';
 
 type Provider = { id: string; name: string; letter: string; desc: string; kind: 'oauth' | 'caldav'; caldavUrl?: string };
 type Account = { id: string; provider: string; email: string };
@@ -24,6 +24,11 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
   const [loaded, setLoaded] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
+  // Calendars teammates shared with me. Ticking a checkbox shows/hides it; the choice is remembered in this browser.
+  const [shared, setShared] = useState<SharedCal[]>([]);
+  const [off, setOff] = useState<Set<string>>(new Set());   // shared calendars the user has unticked (new ones default to ticked)
+  const [showOwn, setShowOwn] = useState(true);
+  const seen = useRef<Set<string> | null>(null);
 
   setPalette(accounts); // per-account colours
   const toast = useCallback((m: string) => { setToastMsg(m); setTimeout(() => setToastMsg(''), 3200); }, []);
@@ -31,6 +36,29 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
     const [p, a, s] = await Promise.all([api('/providers'), api('/accounts'), api('/settings')]);
     setProviders(p); setAccounts(a); setSettings(s); setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    try { setOff(new Set(JSON.parse(localStorage.getItem('evo_shared_off') || '[]'))); setShowOwn(localStorage.getItem('evo_show_own') !== '0'); } catch {}
+  }, []);
+  const saveOff = (next: Set<string>) => { setOff(next); try { localStorage.setItem('evo_shared_off', JSON.stringify([...next])); } catch {} };
+  const toggleShared = (id: string) => { const n = new Set(off); if (n.has(id)) n.delete(id); else n.add(id); saveOff(n); };
+  const toggleOwn = () => { setShowOwn(v => { try { localStorage.setItem('evo_show_own', v ? '0' : '1'); } catch {} return !v; }); };
+
+  // New shares appear in the sidebar by themselves: loaded on open, then every 60 s and when the tab regains focus.
+  const loadShared = useCallback(async () => {
+    try {
+      const list = await api<SharedCal[]>('/team/received');
+      if (seen.current) for (const c of list) if (!seen.current.has(c.id)) toast(`${c.owner} shared their calendar with you`);
+      seen.current = new Set(list.map(c => c.id)); setShared(list);
+    } catch { /* keep the last list */ }
+  }, [toast]);
+  useEffect(() => {
+    loadShared();
+    const t = setInterval(() => { if (document.visibilityState === 'visible') loadShared(); }, 60000);
+    const onVis = () => { if (document.visibilityState === 'visible') loadShared(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+  }, [loadShared]);
 
   useEffect(() => {
     load().catch(e => toast(e.message));
@@ -80,6 +108,19 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={n.icon} /></svg>{n.label}
           </div>
         ))}
+        <div className="side-sec">
+          <div className="side-h">Calendars</div>
+          <label className="side-cal"><input type="checkbox" checked={showOwn} onChange={toggleOwn} />
+            <i style={{ background: 'var(--accent)' }} /><span>My calendar</span></label>
+          <div className="side-h">Shared with me</div>
+          {shared.length === 0 && <div className="side-empty">Nobody has shared a calendar with you yet. It appears here automatically when they do.</div>}
+          {shared.map(c => (
+            <label key={c.id} className="side-cal" title={`${c.owner} (${c.email})${c.permission === 'busy' ? ' · busy only' : ''}`}>
+              <input type="checkbox" checked={!off.has(c.id)} onChange={() => toggleShared(c.id)} />
+              <i style={{ background: sharedColor(c.id) }} /><span>{c.owner}</span>{c.permission === 'busy' && <em>busy only</em>}
+            </label>
+          ))}
+        </div>
         <div className="usercard">
           <div className="avatar">{(user.name || '?')[0].toUpperCase()}</div>
           <div className="who"><b>{user.name}</b><small>{user.email}</small></div>
@@ -89,7 +130,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
 
       <main>
         {page === 'dashboard' && <Dashboard count={accounts.length} enabled={loaded} onGo={setPage} />}
-        {page === 'calendar' && <CalendarView initialView={settings.defaultView} enabled={loaded} accounts={accounts} onToast={toast} onShare={() => setModal({ kind: 'share' })} />}
+        {page === 'calendar' && <CalendarView initialView={settings.defaultView} enabled={loaded} accounts={accounts} shared={shared.filter(c => !off.has(c.id))} showOwn={showOwn} onToast={toast} onShare={() => setModal({ kind: 'share' })} />}
         {page === 'settings' && (
           <section>
             <div className="ph"><div><h1>Setting</h1><p>General preferences</p></div></div>
@@ -144,7 +185,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                 <button className="btn primary" onClick={() => setModal({ kind: 'where', p: modal.p })}>Add another account</button></div>
             </>
           )}
-          {modal?.kind === 'share' && <ShareForm onClose={() => setModal(null)} onToast={toast} />}
+          {modal?.kind === 'share' && <ShareModal accounts={accounts} onClose={() => setModal(null)} onToast={toast} />}
           {modal?.kind === 'where' && (
             <>
               <Head color={COLORS[modal.p.id]} letter={modal.p.letter} title={`Connect ${modal.p.name}`} />
@@ -203,7 +244,82 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
   );
 }
 
-function ShareForm({ onClose, onToast }: { onClose: () => void; onToast: (m: string) => void }) {
+type Mine = { id: string; recipient: string; permission: 'details' | 'busy'; accounts: { id: string; provider: string; email: string }[] };
+const PERMS: [string, string, string][] = [['details', 'Can see details', 'titles, times and locations'], ['busy', 'Busy only', 'no titles or locations']];
+
+function ShareModal({ accounts, onClose, onToast }: { accounts: Account[]; onClose: () => void; onToast: (m: string) => void }) {
+  const [tab, setTab] = useState<'people' | 'link'>('people');
+  return (
+    <div style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+      <div className="seg" style={{ marginBottom: 14, display: 'inline-flex' }}>
+        <button className={tab === 'people' ? 'on' : ''} onClick={() => setTab('people')}>Share with people</button>
+        <button className={tab === 'link' ? 'on' : ''} onClick={() => setTab('link')}>Share a link</button>
+      </div>
+      {tab === 'people' ? <PeopleForm accounts={accounts} onClose={onClose} onToast={onToast} /> : <LinkForm onClose={onClose} onToast={onToast} />}
+    </div>
+  );
+}
+
+function PeopleForm({ accounts, onClose, onToast }: { accounts: Account[]; onClose: () => void; onToast: (m: string) => void }) {
+  const [info, setInfo] = useState<{ available: boolean; domain: string; shares: Mine[] } | null>(null);
+  const [emails, setEmails] = useState('');
+  const [org, setOrg] = useState(false);
+  const [perm, setPerm] = useState<'details' | 'busy'>('details');
+  const [pick, setPick] = useState<Set<string>>(new Set(accounts.map(a => a.id)));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const reload = useCallback(() => api('/team/shares').then(setInfo).catch(e => setErr(e.message)), []);
+  useEffect(() => { reload(); }, [reload]);
+  if (!info) return <p className="hint">{err || 'Loading…'}</p>;
+  if (!info.available) return <><p className="err">Sharing with teammates needs the Supabase database. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the server first.</p><div className="actions"><button className="btn" onClick={onClose}>Close</button></div></>;
+  return (
+    <>
+      <h2>Share your calendar</h2>
+      <p className="sub">People you add see your calendar in their EvoCalendar sidebar automatically, under “Shared with me”.</p>
+      <div className="field"><label>Email addresses (their Zoho sign-in emails)</label>
+        <textarea rows={2} value={emails} onChange={e => setEmails(e.target.value)} placeholder="divyam@yourcompany.com, shubham@yourcompany.com" style={{ width: '100%', fontFamily: 'inherit', fontSize: 13, border: '1px solid var(--line)', borderRadius: 8, padding: 8 }} /></div>
+      {info.domain && <label className="check"><input type="checkbox" checked={org} onChange={e => setOrg(e.target.checked)} /> Everyone at <b>@{info.domain}</b></label>}
+      <div className="field" style={{ marginTop: 10 }}><label>Permission</label>
+        <select value={perm} onChange={e => setPerm(e.target.value as 'details' | 'busy')}>{PERMS.map(([v, l, d]) => <option key={v} value={v}>{l} ({d})</option>)}</select></div>
+      <div className="field"><label>Accounts to include</label>
+        {accounts.length === 0 && <span className="hint">Connect an account under Integration first.</span>}
+        {accounts.map(a => (
+          <label key={a.id} className="check"><input type="checkbox" checked={pick.has(a.id)} onChange={() => setPick(p => { const n = new Set(p); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} />
+            <i className="cdot" style={{ background: evColor({ provider: a.provider, accountEmail: a.email }) }} />{LABELS[a.provider] || a.provider} · {a.email}</label>
+        ))}</div>
+      {err && <p className="err">{err}</p>}
+      <div className="actions"><button className="btn" onClick={onClose}>Close</button>
+        <button className="btn primary" disabled={busy || (!emails.trim() && !org)} onClick={async () => {
+          setBusy(true); setErr('');
+          try {
+            const r = await api('/team/shares', 'POST', { emails, organization: org, permission: perm, accountIds: [...pick] });
+            setInfo(i => i && { ...i, shares: r.shares }); setEmails(''); setOrg(false);
+            onToast(`Shared with ${r.count} ${r.count === 1 ? 'recipient' : 'recipients'}`);
+          } catch (e: any) { setErr(e.message); }
+          setBusy(false);
+        }}>{busy ? 'Sharing…' : 'Share'}</button></div>
+      {info.shares.length > 0 && (
+        <div className="perm" style={{ marginTop: 16, marginBottom: 0 }}>
+          <b style={{ fontSize: 13 }}>Shared with</b>
+          {info.shares.map(s => (
+            <div key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.accounts.map(a => a.email).join(', ')}>{s.recipient.startsWith('@') ? `Everyone at ${s.recipient}` : s.recipient}</span>
+              <select value={s.permission} onChange={async e => {
+                const v = e.target.value as 'details' | 'busy';
+                try { await api('/team/shares/' + s.id, 'PATCH', { permission: v }); setInfo(i => i && { ...i, shares: i.shares.map(x => x.id === s.id ? { ...x, permission: v } : x) }); onToast('Permission updated'); }
+                catch (er: any) { setErr(er.message); }
+              }}>{PERMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+              <button className="btn danger" onClick={async () => { try { await api('/team/shares/' + s.id, 'DELETE'); reload(); onToast('Stopped sharing with ' + s.recipient); } catch (er: any) { setErr(er.message); } }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="hint">Recipients can only view. Remove someone to stop sharing; disconnecting an account also stops sharing it.</p>
+    </>
+  );
+}
+
+function LinkForm({ onClose, onToast }: { onClose: () => void; onToast: (m: string) => void }) {
   const [days, setDays] = useState('7');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);

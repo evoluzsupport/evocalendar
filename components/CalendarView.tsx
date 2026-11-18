@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { COLORS, LABELS, Acct, Ev, acctKey, evColor, fmtTime, sameDay, startOfDay, useEvents } from './shared';
+import { COLORS, LABELS, Acct, Ev, SharedCal, acctKey, evColor, fmtTime, sameDay, startOfDay, useEvents } from './shared';
 
 export type View = 'Day' | 'Week' | 'Month' | 'Agenda';
 const HOUR_PX = 48;
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+/** Where an event comes from. Shared events never reveal the owner's account addresses. */
+const srcLabel = (e: Ev) => e.calendarName ? `Shared by ${e.calendarName}` : `${LABELS[e.provider]} · ${e.accountEmail}`;
 const mondayOf = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
 
 function rangeFor(view: View, cursor: Date): [Date, Date, Date[]] {
@@ -34,7 +36,7 @@ function layout(list: (Ev & { s: Date; e2: Date })[]) {
   return out;
 }
 
-export default function CalendarView({ initialView, enabled, accounts, onToast, onShare, title: pageTitle = 'My Calendar', eventsPath }: { initialView: string; enabled: boolean; accounts: Acct[]; onToast: (m: string) => void; onShare?: () => void; title?: string; eventsPath?: string }) {
+export default function CalendarView({ initialView, enabled, accounts, onToast, onShare, title: pageTitle = 'My Calendar', eventsPath, shared = [], showOwn = true }: { initialView: string; enabled: boolean; accounts: Acct[]; onToast: (m: string) => void; onShare?: () => void; title?: string; eventsPath?: string; shared?: SharedCal[]; showOwn?: boolean }) {
   const [view, setView] = useState<View>((['Day', 'Week', 'Month', 'Agenda'].includes(initialView) ? initialView : 'Week') as View);
   const [cursor, setCursor] = useState(() => new Date());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -44,8 +46,19 @@ export default function CalendarView({ initialView, enabled, accounts, onToast, 
   useEffect(() => { setView((['Day', 'Week', 'Month', 'Agenda'].includes(initialView) ? initialView : 'Week') as View); }, [initialView]);
 
   const [from, to, days] = rangeFor(view, cursor);
-  const { events, syncedAt, errors, loading, refresh } = useEvents(from, to, enabled, 30000, eventsPath);
-  const visible = events.filter(e => !hidden.has(acctKey(e.provider, e.accountEmail)));
+  const own = useEvents(from, to, enabled, 30000, eventsPath);
+  // Calendars ticked in the sidebar ("Shared with me") are fetched only while at least one is ticked.
+  const sharedIds = shared.map(x => x.id).sort().join(',');
+  const team = useEvents(from, to, enabled && !!sharedIds, 30000, `/team/events?ids=${sharedIds}`);
+  const events = useMemo(() => {
+    const on = new Set(sharedIds.split(',').filter(Boolean));
+    return [...(showOwn ? own.events : []), ...team.events.filter(e => e.calendarId && on.has(e.calendarId))];
+  }, [own.events, team.events, sharedIds, showOwn]);
+  const errors = [...own.errors, ...(sharedIds ? team.errors : [])];
+  const loading = own.loading || (!!sharedIds && team.loading);
+  const syncedAt = own.syncedAt;
+  const refresh = () => { own.refresh(); if (sharedIds) team.refresh(); };
+  const visible = events.filter(e => e.calendarId || !hidden.has(acctKey(e.provider, e.accountEmail)));
 
   const step = (dir: number) => setCursor(c => view === 'Month' ? new Date(c.getFullYear(), c.getMonth() + dir, 1) : addDays(c, dir * (view === 'Week' ? 7 : view === 'Day' ? 1 : 30)));
   const title = view === 'Month' ? cursor.toLocaleDateString([], { month: 'long', year: 'numeric' })
@@ -67,8 +80,8 @@ export default function CalendarView({ initialView, enabled, accounts, onToast, 
 
       <div className="cal-meta">
         <div className="legend">
-          {accounts.length === 0 && <span className="hint">{onShare ? 'No accounts connected. Add one under Integration.' : 'No calendars to show.'}</span>}
-          {accounts.length > 0 && events.length === 0 && !loading && <span className="hint">No meetings in this range.</span>}
+          {accounts.length === 0 && shared.length === 0 && <span className="hint">{onShare ? 'No accounts connected. Add one under Integration.' : 'No calendars to show.'}</span>}
+          {(accounts.length > 0 || shared.length > 0) && events.length === 0 && !loading && <span className="hint">No meetings in this range.</span>}
           {accounts.map(a => {
             const k = acctKey(a.provider, a.email), n = events.filter(e => acctKey(e.provider, e.accountEmail) === k).length;
             return (
@@ -93,9 +106,9 @@ export default function CalendarView({ initialView, enabled, accounts, onToast, 
       {open && (
         <div className="overlay show" onClick={e => { if (e.target === e.currentTarget) setOpen(null); }}>
           <div className="modal">
-            <h2><span className="ilogo" style={{ background: evColor(open), width: 32, height: 32, fontSize: 15 }}>{(LABELS[open.provider] || '?')[0]}</span>{open.title}</h2>
+            <h2><span className="ilogo" style={{ background: evColor(open), width: 32, height: 32, fontSize: 15 }}>{(open.calendarName || LABELS[open.provider] || '?')[0].toUpperCase()}</span>{open.title}</h2>
             <p className="sub">{open.allDay ? 'All day · ' + new Date(open.start).toLocaleDateString() : `${new Date(open.start).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}, ${fmtTime(new Date(open.start))} – ${fmtTime(new Date(open.end))}`}</p>
-            <div className="perm"><div><b>Account:</b> {LABELS[open.provider]} · {open.accountEmail}</div>{open.location && <div><b>Location:</b> {open.location}</div>}</div>
+            <div className="perm"><div><b>{open.calendarName ? 'Calendar:' : 'Account:'}</b> {open.calendarName ? `${open.calendarName}${open.busy ? ' (busy only, details hidden)' : ''}` : `${LABELS[open.provider]} · ${open.accountEmail}`}</div>{open.location && <div><b>Location:</b> {open.location}</div>}</div>
             <div className="actions"><button className="btn" onClick={() => setOpen(null)}>Close</button></div>
           </div>
         </div>
@@ -184,7 +197,7 @@ function Agenda({ events, onOpen }: { events: Ev[]; onOpen: (e: Ev) => void }) {
             <div className="row" key={e.id} style={{ cursor: 'pointer' }} onClick={() => onOpen(e)}>
               <span className="bar" style={{ background: evColor(e) }} />
               <span className="time">{e.allDay ? 'All day' : `${fmtTime(e.s)} - ${fmtTime(e.e2)}`}</span><b>{e.title}</b>
-              <span className="src">{LABELS[e.provider]} · {e.accountEmail}</span>
+              <span className="src">{srcLabel(e)}</span>
             </div>
           ))}
         </div>

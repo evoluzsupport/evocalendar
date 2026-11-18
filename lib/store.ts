@@ -7,10 +7,12 @@ import { SKIP_LOGIN } from './config';
 
 export interface User { id: string; zoho_id: string; email: string; name: string }
 export interface Account { id: string; user_id: string; provider: string; email: string; access_token?: string | null; refresh_token?: string | null; expires_at?: number | null; caldav?: string | null; password_enc?: string | null }
+export interface Share { id: string; owner_id: string; owner_name: string; owner_email: string; recipient: string; permission: 'details' | 'busy'; accounts_enc: string; created_at?: string }
 export interface Settings { timezone: string; defaultView: string; syncFrequency: string }
 const DEFAULTS: Settings = { timezone: 'Asia/Kolkata', defaultView: 'Week', syncFrequency: 'Every 5 minutes' };
 
 const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SB_SCHEMA = process.env.SUPABASE_SCHEMA || 'evocalendar';
 const useSupabase = !!(SB_URL && SB_KEY);
 
 async function sb(p: string, init: RequestInit & { upsert?: boolean } = {}) {
@@ -18,6 +20,7 @@ async function sb(p: string, init: RequestInit & { upsert?: boolean } = {}) {
   const r = await fetch(`${SB_URL}/rest/v1/${p}`, {
     ...rest,
     headers: { apikey: SB_KEY!, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json',
+      'Accept-Profile': SB_SCHEMA, 'Content-Profile': SB_SCHEMA, // tables live in their own Postgres schema (default "evocalendar")
       Prefer: 'return=representation' + (upsert ? ',resolution=merge-duplicates' : '') },
     cache: 'no-store',
   });
@@ -31,7 +34,7 @@ const q = encodeURIComponent;
 // With SKIP_LOGIN on a host without a database (e.g. Vercel) fall back to the temp dir: NOT durable, resets on cold starts.
 const TEMP_OK = SKIP_LOGIN;
 const FILE = process.env.NODE_ENV === 'production' && TEMP_OK ? path.join(os.tmpdir(), 'evocalendar', 'db.json') : path.join(process.cwd(), 'data', 'db.json');
-type FileDb = { users: User[]; accounts: Account[]; settings: Record<string, Settings> };
+type FileDb = { users: User[]; accounts: Account[]; settings: Record<string, Settings>; shares?: Share[] };
 function rd(): FileDb {
   if (process.env.NODE_ENV === 'production' && !TEMP_OK) throw new Error('Database not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
   try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return { users: [], accounts: [], settings: {} }; }
@@ -119,4 +122,39 @@ export async function saveSettings(user_id: string, patch: Partial<Settings>): P
     return next;
   }
   const d = rd(); d.settings[user_id] = next; wr(d); return next;
+}
+
+// ---------- Team shares (always server-side: a recipient must be able to read what an owner shared) ----------
+// Sharing needs a database (Supabase). Local dev falls back to data/db.json.
+export const sharingAvailable = useSupabase || process.env.NODE_ENV !== 'production';
+const domainOf = (email: string) => email.split('@')[1] || '';
+/** A share is addressed either to one email, or to "@domain" (everyone in that organisation). */
+export const recipientKeys = (email: string) => [email.toLowerCase(), '@' + domainOf(email.toLowerCase())];
+
+export async function listOwnedShares(owner_id: string): Promise<Share[]> {
+  if (useSupabase) return sb(`shares?owner_id=eq.${q(owner_id)}&select=*&order=created_at`);
+  return (rd().shares || []).filter(s => s.owner_id === owner_id);
+}
+export async function upsertShare(s: Omit<Share, 'id' | 'created_at'>): Promise<Share> {
+  if (useSupabase) return (await sb('shares?on_conflict=owner_id,recipient', { method: 'POST', upsert: true, body: JSON.stringify(s) }))[0];
+  const d = rd(); d.shares ||= [];
+  let x = d.shares.find(y => y.owner_id === s.owner_id && y.recipient === s.recipient);
+  if (x) Object.assign(x, s); else d.shares.push((x = { id: uuid(), created_at: new Date().toISOString(), ...s }));
+  wr(d); return x;
+}
+export async function patchShare(owner_id: string, id: string, patch: Partial<Share>) {
+  if (useSupabase) { await sb(`shares?id=eq.${q(id)}&owner_id=eq.${q(owner_id)}`, { method: 'PATCH', body: JSON.stringify(patch) }); return; }
+  const d = rd(); const x = (d.shares || []).find(s => s.id === id && s.owner_id === owner_id); if (x) { Object.assign(x, patch); wr(d); }
+}
+export async function deleteShare(owner_id: string, id: string) {
+  if (useSupabase) { await sb(`shares?id=eq.${q(id)}&owner_id=eq.${q(owner_id)}`, { method: 'DELETE' }); return; }
+  const d = rd(); d.shares = (d.shares || []).filter(s => !(s.id === id && s.owner_id === owner_id)); wr(d);
+}
+/** Calendars other people shared with this user (by their email or their organisation's domain). Never includes their own. */
+export async function listSharedWithMe(me: { id: string; email: string }): Promise<Share[]> {
+  const keys = recipientKeys(me.email);
+  let rows: Share[];
+  if (useSupabase) rows = await sb(`shares?recipient=in.(${keys.map(k => q('"' + k + '"')).join(',')})&select=*&order=created_at`);
+  else rows = (rd().shares || []).filter(s => keys.includes(s.recipient));
+  return rows.filter(s => s.owner_id !== me.id && s.owner_email.toLowerCase() !== me.email.toLowerCase());
 }

@@ -2,7 +2,7 @@ import { PROVIDERS, ProviderId, ZOHO_CALENDAR, cred, DEMO } from './config';
 import { decrypt } from './crypto';
 import { Account, isCookieUser, patchAccount } from './store';
 
-export interface CalEvent { id: string; provider: string; accountEmail: string; title: string; start: string; end: string; allDay: boolean; location?: string }
+export interface CalEvent { id: string; provider: string; accountEmail: string; title: string; start: string; end: string; allDay: boolean; location?: string; calendarId?: string; calendarName?: string; busy?: boolean }
 
 export async function tokenRequest(tokenUrl: string, body: Record<string, string>) {
   const r = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) });

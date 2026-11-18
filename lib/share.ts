@@ -9,11 +9,14 @@ export const MAX_TOKEN_LEN = 8000;
 
 export interface SharedCalendar { owner: string; exp: number; accounts: Account[] }
 
+/** Only what is needed to read a calendar later (no access tokens when a refresh token exists). */
+export const slimAccounts = (accounts: Account[]) => accounts.map(a => ({
+  id: a.id, provider: a.provider, email: a.email, refresh_token: a.refresh_token ?? null, caldav: a.caldav ?? null, password_enc: a.password_enc ?? null,
+  ...(a.refresh_token ? {} : { access_token: a.access_token ?? null, expires_at: a.expires_at ?? null }),
+}));
+
 export function makeShareToken(owner: string, accounts: Account[], days: number): string {
-  const slim = accounts.map(a => ({
-    id: a.id, provider: a.provider, email: a.email, refresh_token: a.refresh_token ?? null, caldav: a.caldav ?? null, password_enc: a.password_enc ?? null,
-    ...(a.refresh_token ? {} : { access_token: a.access_token ?? null, expires_at: a.expires_at ?? null }),
-  }));
+  const slim = slimAccounts(accounts);
   const token = encrypt(JSON.stringify({ exp: Date.now() + days * 864e5, owner, accounts: slim }));
   if (token.length > MAX_TOKEN_LEN) throw new Error('Too many connected accounts to fit in one link. Disconnect an account you do not need to share and try again.');
   return token;
