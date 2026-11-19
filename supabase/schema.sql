@@ -53,3 +53,30 @@ alter table evocalendar.shares enable row level security;
 grant usage on schema evocalendar to service_role;
 grant all on all tables in schema evocalendar to service_role;
 alter default privileges in schema evocalendar grant all on tables to service_role;
+
+-- EvoCore AI directory sync (applied to the evocore-ai project). Copies public.users into evocalendar.users so the share picker
+-- can list everyone. The app calls it hourly via rpc/sync_evocore_users; people keep their row when they first sign in.
+alter table evocalendar.users
+  add column if not exists department text, add column if not exists avatar_url text,
+  add column if not exists evocore_id uuid unique, add column if not exists is_active boolean not null default true;
+create unique index if not exists evocalendar_users_email_key on evocalendar.users (lower(email)) where email is not null;
+create or replace function evocalendar.sync_evocore_users() returns integer
+language plpgsql security definer set search_path = public, evocalendar as $$
+declare n integer;
+begin
+  update evocalendar.users eu
+     set evocore_id = pu.id, name = coalesce(eu.name, pu.full_name), department = pu.department::text,
+         avatar_url = pu.avatar_url, is_active = coalesce(pu.is_active, true)
+    from public.users pu
+   where lower(eu.email) = lower(pu.email) and pu.email not ilike '%.invalid' and eu.evocore_id is null;
+  insert into evocalendar.users (zoho_id, email, name, department, avatar_url, evocore_id, is_active)
+  select 'evocore:' || pu.id, pu.email, pu.full_name, pu.department::text, pu.avatar_url, pu.id, coalesce(pu.is_active, true)
+    from public.users pu where pu.email is not null and pu.email not ilike '%.invalid'
+  on conflict (evocore_id) do update
+     set email = excluded.email, name = excluded.name, department = excluded.department,
+         avatar_url = excluded.avatar_url, is_active = excluded.is_active;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function evocalendar.sync_evocore_users() from public, anon, authenticated;
+grant execute on function evocalendar.sync_evocore_users() to service_role;

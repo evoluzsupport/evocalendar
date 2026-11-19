@@ -70,7 +70,12 @@ async function gwrite(d: GuestData, uid: string) {
 
 // ---------- API ----------
 export async function upsertUser(zoho_id: string, email: string, name: string): Promise<User> {
-  if (useSupabase) return (await sb('users?on_conflict=zoho_id', { method: 'POST', upsert: true, body: JSON.stringify({ zoho_id, email, name }) }))[0];
+  if (useSupabase) {
+    // Someone already copied in from the EvoCore AI directory (same email): claim that row instead of creating a duplicate.
+    const pre = (await sb(`users?email=ilike.${q(email.replace(/[%*_]/g, ''))}&zoho_id=like.${q('evocore:*')}&select=id`))[0];
+    if (pre) return (await sb(`users?id=eq.${q(pre.id)}`, { method: 'PATCH', body: JSON.stringify({ zoho_id, email, name }) }))[0];
+    return (await sb('users?on_conflict=zoho_id', { method: 'POST', upsert: true, body: JSON.stringify({ zoho_id, email, name }) }))[0];
+  }
   const d = rd(); let u = d.users.find(x => x.zoho_id === zoho_id);
   if (u) Object.assign(u, { email, name }); else d.users.push((u = { id: uuid(), zoho_id, email, name }));
   wr(d); return u;
@@ -149,6 +154,17 @@ export async function patchShare(owner_id: string, id: string, patch: Partial<Sh
 export async function deleteShare(owner_id: string, id: string) {
   if (useSupabase) { await sb(`shares?id=eq.${q(id)}&owner_id=eq.${q(owner_id)}`, { method: 'DELETE' }); return; }
   const d = rd(); d.shares = (d.shares || []).filter(s => !(s.id === id && s.owner_id === owner_id)); wr(d);
+}
+// ---------- Directory: everyone in the EvoCore AI user list, copied into evocalendar.users by evocalendar.sync_evocore_users() ----------
+export interface Person { email: string; name: string; department?: string | null; avatar_url?: string | null }
+let lastSync = 0;
+export async function listDirectory(): Promise<Person[]> {
+  if (!useSupabase) return [];
+  if (Date.now() - lastSync > 60 * 60 * 1000) { // refresh from EvoCore AI at most hourly
+    lastSync = Date.now();
+    try { await sb('rpc/sync_evocore_users', { method: 'POST', body: '{}' }); } catch { /* keep serving the last copy */ }
+  }
+  return sb('users?is_active=eq.true&email=not.is.null&select=email,name,department,avatar_url&order=name');
 }
 /** Calendars other people shared with this user (by their email or their organisation's domain). Never includes their own. */
 export async function listSharedWithMe(me: { id: string; email: string }): Promise<Share[]> {

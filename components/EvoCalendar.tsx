@@ -260,6 +260,32 @@ function ShareModal({ accounts, onClose, onToast }: { accounts: Account[]; onClo
   );
 }
 
+type Person = { email: string; name: string; department: string };
+/** Searchable list of everyone in the EvoCore AI user list; clicking a person adds or removes their email in the box above. */
+function DirectoryPicker({ emails, setEmails }: { emails: string; setEmails: (v: string) => void }) {
+  const [people, setPeople] = useState<Person[]>([]);
+  const [q, setQ] = useState('');
+  useEffect(() => { api('/team/directory').then(r => setPeople(r.people || [])).catch(() => {}); }, []);
+  if (!people.length) return null;
+  const chosen = new Set(emails.split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean));
+  const toggle = (e: string) => { const n = new Set(chosen); if (n.has(e)) n.delete(e); else n.add(e); setEmails([...n].join(', ')); };
+  const t = q.trim().toLowerCase();
+  const shown = people.filter(p => !t || p.name.toLowerCase().includes(t) || p.email.includes(t) || p.department.toLowerCase().includes(t));
+  return (
+    <div className="field"><label>Pick from your team ({people.length})</label>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name, email or department" style={{ width: '100%', marginBottom: 6 }} />
+      <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8, padding: '2px 8px' }}>
+        {shown.map(p => (
+          <label key={p.email} className="check" style={{ margin: '5px 0' }}>
+            <input type="checkbox" checked={chosen.has(p.email)} onChange={() => toggle(p.email)} />
+            <span>{p.name} <span className="hint">· {p.email}{p.department ? ` · ${p.department}` : ''}</span></span>
+          </label>
+        ))}
+        {!shown.length && <span className="hint">No match</span>}
+      </div></div>
+  );
+}
+
 function PeopleForm({ accounts, onClose, onToast }: { accounts: Account[]; onClose: () => void; onToast: (m: string) => void }) {
   const [info, setInfo] = useState<{ available: boolean; domain: string; shares: Mine[] } | null>(null);
   const [emails, setEmails] = useState('');
@@ -278,6 +304,7 @@ function PeopleForm({ accounts, onClose, onToast }: { accounts: Account[]; onClo
       <p className="sub">People you add see your calendar in their EvoCalendar sidebar automatically, under “Shared with me”.</p>
       <div className="field"><label>Email addresses (their Zoho sign-in emails)</label>
         <textarea rows={2} value={emails} onChange={e => setEmails(e.target.value)} placeholder="divyam@yourcompany.com, shubham@yourcompany.com" style={{ width: '100%', fontFamily: 'inherit', fontSize: 13, border: '1px solid var(--line)', borderRadius: 8, padding: 8 }} /></div>
+      <DirectoryPicker emails={emails} setEmails={setEmails} />
       {info.domain && <label className="check"><input type="checkbox" checked={org} onChange={e => setOrg(e.target.checked)} /> Everyone at <b>@{info.domain}</b></label>}
       <div className="field" style={{ marginTop: 10 }}><label>Permission</label>
         <select value={perm} onChange={e => setPerm(e.target.value as 'details' | 'busy')}>{PERMS.map(([v, l, d]) => <option key={v} value={v}>{l} ({d})</option>)}</select></div>
