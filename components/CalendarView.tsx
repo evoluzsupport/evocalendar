@@ -1,9 +1,12 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, LABELS, Acct, Ev, SharedCal, acctKey, evColor, fmtTime, sameDay, startOfDay, useEvents } from './shared';
 
 export type View = 'Day' | 'Week' | 'Month' | 'Agenda';
-const HOUR_PX = 48;
+// Zoom levels: pixels per hour, and the minutes between labelled ticks at that level.
+const ZOOMS: { px: number; step: number }[] = [{ px: 48, step: 60 }, { px: 96, step: 30 }, { px: 192, step: 15 }, { px: 384, step: 5 }];
+const tickLabel = (min: number) => { const h = Math.floor(min / 60), m = min % 60; return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 /** Where an event comes from. Shared events never reveal the owner's account addresses. */
 const srcLabel = (e: Ev) => e.calendarName ? `Shared by ${e.calendarName}` : `${LABELS[e.provider]} · ${e.accountEmail}`;
@@ -123,11 +126,39 @@ const overlapsDay = (e: E2, d: Date) => +e.s < +addDays(d, 1) && +e.e2 > +d && !
 
 function TimeGrid({ days, events, now, onOpen }: { days: Date[]; events: Ev[]; now: Date; onOpen: (e: Ev) => void }) {
   const evs = useMemo(() => prep(events), [events]);
-  const scroller = (el: HTMLDivElement | null) => { if (el && !el.dataset.done) { el.scrollTop = 7.5 * HOUR_PX; el.dataset.done = '1'; } };
-  const cols = `56px repeat(${days.length},1fr)`;
-  const nowTop = (now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_PX;
+  const [zoom, setZoom] = useState(0);
+  const [tz, setTz] = useState('');
+  const body = useRef<HTMLDivElement | null>(null);
+  const { px: HP, step } = ZOOMS[zoom];
+  // Time zone is read on the client only (the server's zone may differ), e.g. "Asia/Calcutta (GMT+5:30)".
+  useEffect(() => {
+    try {
+      const o = new Intl.DateTimeFormat(undefined, { timeZoneName: 'shortOffset' }).formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value;
+      setTz(`${Intl.DateTimeFormat().resolvedOptions().timeZone}${o ? ' (' + o + ')' : ''}`);
+    } catch { setTz('UTC'); }
+  }, []);
+  const scroller = (el: HTMLDivElement | null) => { body.current = el; if (el && !el.dataset.done) { el.scrollTop = 7.5 * HP; el.dataset.done = '1'; } };
+  const changeZoom = (next: number) => {
+    if (next < 0 || next >= ZOOMS.length) return;
+    const el = body.current;
+    // Keep the same time of day in the middle of the view after zooming.
+    const mid = el ? (el.scrollTop + el.clientHeight / 2) / HP : 0;
+    setZoom(next);
+    requestAnimationFrame(() => { if (el) el.scrollTop = mid * ZOOMS[next].px - el.clientHeight / 2; });
+  };
+  const cols = `64px repeat(${days.length},1fr)`;
+  const nowTop = (now.getHours() * 60 + now.getMinutes()) / 60 * HP;
+  const ticks = [...Array(24 * 60 / step)].map((_, i) => i * step).filter(m => m !== 0);
   return (
     <div className="tg">
+      <div className="tg-bar">
+        <span className="tg-tz" title="Meetings are shown in this time zone">🌐 {tz || '…'}</span>
+        <span className="tg-zoom">
+          <button className="btn" onClick={() => changeZoom(zoom - 1)} disabled={zoom === 0} aria-label="Zoom out">−</button>
+          <span>{step === 60 ? '1 hour' : step + ' min'} slots</span>
+          <button className="btn" onClick={() => changeZoom(zoom + 1)} disabled={zoom === ZOOMS.length - 1} aria-label="Zoom in">+</button>
+        </span>
+      </div>
       <div className="tg-head" style={{ gridTemplateColumns: cols }}>
         <div className="hd" />
         {days.map(d => <div key={+d} className={'hd' + (sameDay(d, now) ? ' today' : '')}>{d.toLocaleDateString([], { weekday: 'short' })} <b>{d.getDate()}</b></div>)}
@@ -139,23 +170,27 @@ function TimeGrid({ days, events, now, onOpen }: { days: Date[]; events: Ev[]; n
         ))}
       </div>
       <div className="tg-body" ref={scroller}>
-        <div className="tg-inner" style={{ gridTemplateColumns: cols, height: 24 * HOUR_PX }}>
-          <div className="gutter">{[...Array(24)].map((_, h) => <div key={h} style={{ height: HOUR_PX }}><span>{h === 0 ? '' : `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`}</span></div>)}</div>
+        <div className="tg-inner" style={{ gridTemplateColumns: cols, height: 24 * HP, ['--hp' as any]: HP + 'px', ['--step' as any]: (HP * step / 60) + 'px' }}>
+          <div className="gutter" style={{ position: 'relative' }}>
+            {[...Array(24)].map((_, h) => <div key={h} style={{ height: HP }}><span>{h === 0 ? '' : hourLabel(h)}</span></div>)}
+            {step < 60 && ticks.filter(m => m % 60 !== 0).map(m => <span key={m} className="minor" style={{ top: m / 60 * HP }}>{tickLabel(m)}</span>)}
+          </div>
           {days.map(d => {
             const timed = evs.filter(e => !e.allDay && overlapsDay(e, d)).map(e => ({ ...e, s: new Date(Math.max(+e.s, +d)), e2: new Date(Math.min(+e.e2, +addDays(d, 1))) }));
             return (
               <div key={+d} className="day">
                 {layout(timed).map(({ ev, col, cols: n }) => {
-                  const top = (ev.s.getHours() * 60 + ev.s.getMinutes()) / 60 * HOUR_PX;
-                  const h = Math.max(20, (+ev.e2 - +ev.s) / 3600000 * HOUR_PX - 2);
+                  const top = (ev.s.getHours() * 60 + ev.s.getMinutes()) / 60 * HP;
+                  const h = Math.max(20, (+ev.e2 - +ev.s) / 3600000 * HP - 2);
                   return (
-                    <button key={ev.id} className="tev" title={ev.title} onClick={() => onOpen(evs.find(x => x.id === ev.id)!)}
+                    <button key={ev.id} className="tev" title={`${ev.title}
+${fmtTime(ev.s)} – ${fmtTime(ev.e2)}`} onClick={() => onOpen(evs.find(x => x.id === ev.id)!)}
                       style={{ top, height: h, left: `calc(${(col / n) * 100}% + 2px)`, width: `calc(${100 / n}% - 4px)`, background: evColor(ev) }}>
                       <b>{ev.title}</b>{h > 34 && <span>{fmtTime(ev.s)} – {fmtTime(ev.e2)}</span>}
                     </button>
                   );
                 })}
-                {sameDay(d, now) && <div className="nowline" style={{ top: nowTop }} />}
+                {sameDay(d, now) && <div className="nowline" style={{ top: nowTop }}><i>{fmtTime(now)}</i></div>}
               </div>
             );
           })}

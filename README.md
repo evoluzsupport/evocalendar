@@ -30,6 +30,22 @@ See `.env.example` for every variable.
 4. Put the Client ID and Secret in `.env.local` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), restart `npm run dev`,
    then Integration → Google Connect. For anyone outside your test users, Google requires app verification.
 
+## Microsoft setup (Outlook, Hotmail, Microsoft 365 calendars)
+1. portal.azure.com (or entra.microsoft.com) → **App registrations → New registration**. Name it `EvoCalendar`.
+2. **Supported account types**: choose *Accounts in any organizational directory and personal Microsoft accounts*.
+   The app uses the `/common` endpoint, so any other choice breaks Outlook.com/Hotmail accounts
+   (error: "Selected user account does not exist in tenant 'Microsoft Services'").
+   If you need to change it later: **Manifest** → `"signInAudience": "AzureADandPersonalMicrosoftAccount"`.
+3. **Redirect URI** (platform *Web*): `<BASE_URL>/api/oauth/callback`. For local testing also add
+   `http://localhost:3000/api/oauth/callback`. It must match exactly, including `https` and no trailing slash.
+4. **API permissions → Microsoft Graph → Delegated**: `Calendars.Read`, `User.Read`, `offline_access`, `openid`, `email`.
+   Work/school tenants that block user consent need an admin to approve the app.
+5. **Certificates & secrets → New client secret**. Copy the secret *Value* immediately (it is hidden afterwards)
+   and note the **Application (client) ID** from Overview. Secrets expire (max 24 months), so set a renewal reminder.
+6. Set `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` in `.env.local` (and in your hosting settings), then restart/redeploy.
+   Integration → Microsoft → Connect. Meetings sync read-only from the account's main calendar via Microsoft Graph.
+   Unverified publishers show a warning on the consent screen until publisher verification is done; it still works.
+
 ## How sync works
 Meetings are fetched live from each provider for the visible date range, on every navigation, every 30 s while open,
 and when the tab regains focus. Recurring events from CalDAV accounts show only their first instance.
