@@ -190,3 +190,8 @@ aside{position:sticky;top:0;height:100vh}
 .mg .hd{background:#eef0f4;color:#374151;border-bottom:2px solid var(--grid);border-right:1px solid var(--grid-soft)}
 .mc{border-right:1px solid var(--grid);border-bottom:1px solid var(--grid)}
 .mc.dim{background:#f3f4f6}
+
+.site-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 28px;border-top:1px solid var(--line);background:#fff;color:var(--muted);font-size:13px}
+.site-foot-links{display:flex;gap:20px;flex-wrap:wrap}
+.site-foot-links a{color:var(--muted);text-decoration:none}
+.site-foot-links a:hover{color:var(--ink)}
