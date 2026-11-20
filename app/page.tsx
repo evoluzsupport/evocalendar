@@ -15,6 +15,13 @@ const FEATURES = [
   { t: 'Detect clashes early', d: 'Overlapping meetings from different accounts sit side by side, so double-bookings are obvious.', i: '👀' },
 ];
 
+// Update these URLs if your site uses different paths.
+const FOOTER_LINKS = {
+  home: 'https://evoluz.tech',
+  privacy: 'https://evoluz.tech/privacy-policy',
+  terms: 'https://evoluz.tech/terms-of-service',
+};
+
 export default async function Landing({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (await currentUser()) redirect('/app');
   const { error } = await searchParams;
@@ -78,7 +85,15 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
         <a className="lp-btn primary big" href="/api/auth/zoho"><span className="lp-z">Z</span>Sign in with Zoho</a>
       </section>
 
-      <footer className="lp-foot"><span>© {new Date().getFullYear()} EvoCalendar</span><span>Read-only access to your calendars. Disconnect any time.</span></footer>
+      <footer className="lp-foot">
+        <span>© {new Date().getFullYear()} EvoCalendar</span>
+        <nav className="lp-foot-links" aria-label="Footer">
+          <a href={FOOTER_LINKS.home}>Home</a>
+          <a href={FOOTER_LINKS.privacy}>Privacy Policy</a>
+          <a href={FOOTER_LINKS.terms}>Terms of Service</a>
+        </nav>
+        <span>Read-only access to your calendars. Disconnect any time.</span>
+      </footer>
     </div>
   );
 }

@@ -58,4 +58,7 @@
 .lp-final{text-align:center;padding:90px 24px;margin:0 auto 40px;max-width:900px;border-radius:28px;background:radial-gradient(ellipse at 50% 0,rgba(91,124,255,.3),transparent 70%),#0d1330;border:1px solid #232c4d}
 .lp-final h2{margin-bottom:28px}
 .lp-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:1160px;margin:0 auto;padding:26px 24px 40px;color:var(--mut);font-size:13.5px;border-top:1px solid #151c38}
+.lp-foot-links{display:flex;gap:20px;flex-wrap:wrap}
+.lp-foot-links a{color:var(--mut);text-decoration:none}
+.lp-foot-links a:hover{color:#fff}
 @media(max-width:720px){.lp-nav nav{display:none}.lp-mock{transform:none}.lp-mock-grid .col{height:210px}}
