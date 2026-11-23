@@ -28,7 +28,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
   return (
     <div className="lp">
       <header className="lp-nav">
-        <a className="lp-brand" href="/"><span className="lp-logo">EC</span>EvoCalendar</a>
+        <a className="lp-brand" href="/"><span className="lp-logo">OC</span>OneCalendar</a>
         <nav><a href="#features">Features</a><a href="#how">How it works</a><a href="#providers">Integrations</a></nav>
         <a className="lp-btn ghost" href="/api/auth/zoho">Sign in</a>
       </header>
@@ -39,14 +39,14 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
         <div className="lp-glow" />
         <span className="lp-pill">One calendar for every email account</span>
         <h1>All your meetings.<br /><span>One beautiful calendar.</span></h1>
-        <p>EvoCalendar pulls meetings from Google, Outlook, Zoho, Yahoo and Hostinger into a single, colour-coded, always-up-to-date view.</p>
+        <p>OneCalendar pulls meetings from Google, Outlook, Zoho, Yahoo and Hostinger into a single, colour-coded, always-up-to-date view.</p>
         <div className="lp-cta">
           <a className="lp-btn primary big" href="/api/auth/zoho"><span className="lp-z">Z</span>Sign in with Zoho</a>
           <a className="lp-btn ghost big" href="#how">See how it works</a>
         </div>
 
         <div className="lp-mock">
-          <div className="lp-mock-bar"><i /><i /><i /><b>EvoCalendar · Week</b></div>
+          <div className="lp-mock-bar"><i /><i /><i /><b>OneCalendar · Week</b></div>
           <div className="lp-mock-grid">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => <div key={d} className="hd">{d}</div>)}
             <div className="col"><div className="ev g" style={{ top: 14, height: 44 }}>Team stand-up</div><div className="ev z" style={{ top: 78, height: 70 }}>Project kickoff</div><div className="ev m" style={{ top: 180, height: 56 }}>Client review</div></div>
@@ -86,7 +86,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
       </section>
 
       <footer className="lp-foot">
-        <span>© {new Date().getFullYear()} EvoCalendar</span>
+        <span>© {new Date().getFullYear()} OneCalendar</span>
         <nav className="lp-foot-links" aria-label="Footer">
           <a href={FOOTER_LINKS.home}>Home</a>
           <a href={FOOTER_LINKS.privacy}>Privacy Policy</a>

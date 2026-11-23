@@ -102,7 +102,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
   return (
     <div className="app">
       <aside>
-        <div className="brand"><div className="logo">EC</div>EvoCalendar</div>
+        <div className="brand"><div className="logo">OC</div>OneCalendar</div>
         {NAV.map(n => (
           <div key={n.id} className={'nav' + (page === n.id ? ' active' : '')} onClick={() => setPage(n.id)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={n.icon} /></svg>{n.label}
@@ -223,7 +223,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
               <h2 style={{ justifyContent: 'center', marginBottom: 4 }}>Connecting {modal.p.name}</h2>
               <p className="sub" style={{ margin: 0 }}>Please wait, this takes a few seconds</p>
               <ul className="steps">
-                {[`Signing in to ${modal.p.name}`, 'Authorizing EvoCalendar', 'Connecting your calendars', 'Syncing meetings'].map((t, i) => (
+                {[`Signing in to ${modal.p.name}`, 'Authorizing OneCalendar', 'Connecting your calendars', 'Syncing meetings'].map((t, i) => (
                   <li key={t} className={i < modal.step ? 'done' : i === modal.step ? 'doing' : ''}><span className="ic">{i < modal.step ? '✓' : ''}</span>{t}</li>
                 ))}
               </ul>
@@ -301,7 +301,7 @@ function PeopleForm({ accounts, onClose, onToast }: { accounts: Account[]; onClo
   return (
     <>
       <h2>Share your calendar</h2>
-      <p className="sub">People you add see your calendar in their EvoCalendar sidebar automatically, under “Shared with me”.</p>
+      <p className="sub">People you add see your calendar in their OneCalendar sidebar automatically, under “Shared with me”.</p>
       <div className="field"><label>Email addresses (their Zoho sign-in emails)</label>
         <textarea rows={2} value={emails} onChange={e => setEmails(e.target.value)} placeholder="divyam@yourcompany.com, shubham@yourcompany.com" style={{ width: '100%', fontFamily: 'inherit', fontSize: 13, border: '1px solid var(--line)', borderRadius: 8, padding: 8 }} /></div>
       <DirectoryPicker emails={emails} setEmails={setEmails} />

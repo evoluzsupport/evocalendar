@@ -8,7 +8,7 @@ export const FOOTER_LINKS = {
 export default function SiteFooter() {
   return (
     <footer className="site-foot">
-      <span>© {new Date().getFullYear()} EvoCalendar</span>
+      <span>© {new Date().getFullYear()} OneCalendar</span>
       <nav className="site-foot-links" aria-label="Footer">
         <a href={FOOTER_LINKS.home}>Home</a>
         <a href={FOOTER_LINKS.privacy}>Privacy Policy</a>

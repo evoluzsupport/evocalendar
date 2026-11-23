@@ -1,4 +1,4 @@
--- EvoCalendar schema. Lives in its own Postgres schema ("evocalendar") so it can share a Supabase project with other apps.
+-- OneCalendar schema. Lives in its own Postgres schema ("evocalendar") so it can share a Supabase project with other apps.
 -- Run once in the Supabase SQL editor, then expose the schema to the API:
 --   Dashboard > Project Settings > API > "Exposed schemas" > add: evocalendar
 -- RLS is enabled with no policies: only the server (service role key) can read/write.

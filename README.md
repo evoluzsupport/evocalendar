@@ -1,4 +1,4 @@
-# EvoCalendar
+# OneCalendar
 
 All your meetings from Google, Outlook/Hotmail, Zoho, Yahoo and Hostinger in one live, colour-coded calendar.
 Next.js (App Router) · Zoho sign-in · Supabase storage.
@@ -31,7 +31,7 @@ See `.env.example` for every variable.
    then Integration → Google Connect. For anyone outside your test users, Google requires app verification.
 
 ## Microsoft setup (Outlook, Hotmail, Microsoft 365 calendars)
-1. portal.azure.com (or entra.microsoft.com) → **App registrations → New registration**. Name it `EvoCalendar`.
+1. portal.azure.com (or entra.microsoft.com) → **App registrations → New registration**. Name it `OneCalendar`.
 2. **Supported account types**: choose *Accounts in any organizational directory and personal Microsoft accounts*.
    The app uses the `/common` endpoint, so any other choice breaks Outlook.com/Hotmail accounts
    (error: "Selected user account does not exist in tenant 'Microsoft Services'").

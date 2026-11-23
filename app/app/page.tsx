@@ -4,7 +4,7 @@ import SiteFooter from '@/components/SiteFooter';
 import { currentUser } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'EvoCalendar' };
+export const metadata = { title: 'OneCalendar' };
 
 export default async function AppPage() {
   const user = await currentUser();
