@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { BASE, HAS_DB, ZOHO_ACCOUNTS, cred } from '@/lib/config';
+import { BASE, HAS_DB, zohoAccounts, cred } from '@/lib/config';
 import { idTokenClaims, readState } from '@/lib/oauth';
 import { tokenRequest } from '@/lib/events';
 import { setSession } from '@/lib/session';
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   if (sp.get('error') || !sp.get('code')) return fail(sp.get('error') || 'Sign-in cancelled');
   try {
     const { clientId, clientSecret } = cred('zoho');
-    const t = await tokenRequest(`${ZOHO_ACCOUNTS}/oauth/v2/token`, {
+    const t = await tokenRequest(`${zohoAccounts(sp.get('accounts-server'))}/oauth/v2/token`, {
       grant_type: 'authorization_code', code: sp.get('code')!, redirect_uri: `${BASE}/api/auth/zoho/callback`, client_id: clientId, client_secret: clientSecret,
     });
     const c = idTokenClaims(t.id_token);

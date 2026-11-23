@@ -1,4 +1,4 @@
-import { PROVIDERS, ProviderId, ZOHO_CALENDAR, cred, DEMO } from './config';
+import { PROVIDERS, ProviderId, zohoAccounts, zohoCalendar, cred, DEMO } from './config';
 import { decrypt } from './crypto';
 import { Account, isCookieUser, patchAccount } from './store';
 
@@ -18,7 +18,8 @@ async function freshToken(a: Account): Promise<string> {
   if (a.access_token && a.expires_at && Date.now() < a.expires_at - 60000) return a.access_token;
   if (!a.refresh_token) { if (a.access_token) return a.access_token; throw new Error('Reconnect this account (no refresh token)'); }
   const c = cred(a.provider);
-  const t = await tokenRequest(PROVIDERS[a.provider as ProviderId].tokenUrl!, { grant_type: 'refresh_token', refresh_token: a.refresh_token, client_id: c.clientId, client_secret: c.clientSecret });
+  const tokenUrl = a.provider === 'zoho' ? `${zohoAccounts(a.caldav)}/oauth/v2/token` : PROVIDERS[a.provider as ProviderId].tokenUrl!;
+  const t = await tokenRequest(tokenUrl, { grant_type: 'refresh_token', refresh_token: a.refresh_token, client_id: c.clientId, client_secret: c.clientSecret });
   const exp = Date.now() + (t.expires_in || 3600) * 1000;
   tokenCache.set(a.id, { t: t.access_token, exp });
   if (!isCookieUser(a.user_id)) await patchAccount(a.id, { access_token: t.access_token, expires_at: exp }, a.user_id);
@@ -78,6 +79,7 @@ const zfmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + '
 
 async function zoho(a: Account, from: Date, to: Date): Promise<CalEvent[]> {
   const h = { Authorization: 'Zoho-oauthtoken ' + (await freshToken(a)) };
+  const ZOHO_CALENDAR = zohoCalendar(a.caldav);
   const cals = (await getJson(`${ZOHO_CALENDAR}/api/v1/calendars`, h)).calendars || [];
   // Zoho limits the range to 31 days per request
   const windows: [Date, Date][] = [];

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { BASE, PROVIDERS, ProviderId, cred } from '@/lib/config';
+import { BASE, PROVIDERS, ProviderId, cred, zohoAccounts } from '@/lib/config';
 import { tokenRequest } from '@/lib/events';
 import { idTokenClaims, readState } from '@/lib/oauth';
 import { currentUser } from '@/lib/session';
@@ -47,15 +47,16 @@ export async function GET(req: NextRequest) {
   if (sp.get('error') || !sp.get('code')) return back({ error: sp.get('error_description') || sp.get('error') || 'Cancelled' });
   try {
     const p = PROVIDERS[st.provider], c = cred(st.provider);
-    const t = await tokenRequest(p.tokenUrl!, { grant_type: 'authorization_code', code: sp.get('code')!, redirect_uri: `${BASE}/api/oauth/callback`, client_id: c.clientId, client_secret: c.clientSecret });
+    const zServer = st.provider === 'zoho' ? zohoAccounts(sp.get('accounts-server')) : null;
+    const t = await tokenRequest(zServer ? `${zServer}/oauth/v2/token` : p.tokenUrl!, { grant_type: 'authorization_code', code: sp.get('code')!, redirect_uri: `${BASE}/api/oauth/callback`, client_id: c.clientId, client_secret: c.clientSecret });
     const claims = idTokenClaims(t.id_token);
     const email = claims.email || claims.preferred_username;
     if (!email) throw new Error('Could not read the account email');
     if (remote && isCookieUser(uid)) {
       if (!t.refresh_token) throw new Error(`${PROVIDERS[st.provider].name} did not grant long-term access. Open the link again and press Allow on the consent screen. If it still fails, remove EvoCalendar from that account's connected apps and retry.`);
-      return codePage(email, encrypt(JSON.stringify({ provider: st.provider, email, refresh_token: t.refresh_token, exp: Date.now() + 10 * 60000 })));
+      return codePage(email, encrypt(JSON.stringify({ provider: st.provider, email, refresh_token: t.refresh_token, ...(zServer ? { server: zServer } : {}), exp: Date.now() + 10 * 60000 })));
     }
-    await addAccount({ user_id: uid, provider: st.provider, email, access_token: t.access_token, refresh_token: t.refresh_token || null, expires_at: Date.now() + (t.expires_in || 3600) * 1000 });
+    await addAccount({ user_id: uid, provider: st.provider, email, access_token: t.access_token, refresh_token: t.refresh_token || null, ...(zServer ? { caldav: zServer } : {}), expires_at: Date.now() + (t.expires_in || 3600) * 1000 });
     return back({ connected: email });
   } catch (e: any) { return back({ error: e.message }); }
 }

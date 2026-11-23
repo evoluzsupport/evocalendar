@@ -11,6 +11,15 @@ export const DC = process.env.ZOHO_DC || 'in'; // Zoho data centre: com, in, eu,
 export const ZOHO_ACCOUNTS = `https://accounts.zoho.${DC}`;
 export const ZOHO_CALENDAR = `https://calendar.zoho.${DC}`;
 
+// Zoho is multi-region: a .eu / .com / .com.au ... user's tokens only work on their own data centre. After authorizing, Zoho
+// appends `accounts-server` (e.g. https://accounts.zoho.eu) to the callback; we validate it and use it for the token exchange,
+// refresh and Calendar API calls. It is stored on the account in the `caldav` column (unused for OAuth providers).
+export function zohoAccounts(server?: string | null): string {
+  const m = (server || '').trim().match(/^https:\/\/accounts\.zoho\.(com|eu|in|com\.au|jp|sa|ca|com\.cn)\/?$/i);
+  return m ? `https://accounts.zoho.${m[1].toLowerCase()}` : ZOHO_ACCOUNTS;
+}
+export const zohoCalendar = (server?: string | null) => zohoAccounts(server).replace('//accounts.', '//calendar.');
+
 export type ProviderId = 'google' | 'microsoft' | 'zoho' | 'yahoo';
 export interface ProviderDef { name: string; letter: string; desc: string; kind: 'oauth' | 'caldav'; demoEmail: string; authUrl?: string; tokenUrl?: string; scope?: string; extra?: Record<string, string>; caldavUrl?: string }
 
