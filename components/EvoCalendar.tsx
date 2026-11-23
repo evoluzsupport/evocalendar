@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CalendarView from './CalendarView';
-import { COLORS, LABELS, SharedCal, api, evColor, fmtTime, setPalette, sharedColor, startOfDay, sameDay, useEvents } from './shared';
+import { COLORS, LABELS, SharedCal, acctKey, api, evColor, fmtTime, hasOverride, loadColorOverrides, setColorOverride, setPalette, sharedColor, sharedKey, startOfDay, sameDay, useEvents } from './shared';
 
 type Provider = { id: string; name: string; letter: string; desc: string; kind: 'oauth' | 'caldav'; caldavUrl?: string };
 type Account = { id: string; provider: string; email: string };
@@ -30,6 +30,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
   const [showOwn, setShowOwn] = useState(true);
   const seen = useRef<Set<string> | null>(null);
 
+  const [, setColorVer] = useState(0); // bumps to re-render when a colour changes
   setPalette(accounts); // per-account colours
   const toast = useCallback((m: string) => { setToastMsg(m); setTimeout(() => setToastMsg(''), 3200); }, []);
   const load = useCallback(async () => {
@@ -37,6 +38,8 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
     setProviders(p); setAccounts(a); setSettings(s); setLoaded(true);
   }, []);
 
+  useEffect(() => { loadColorOverrides(); setColorVer(v => v + 1); }, []);
+  const pickColor = (key: string, c: string | null) => { setColorOverride(key, c); setColorVer(v => v + 1); };
   useEffect(() => {
     try { setOff(new Set(JSON.parse(localStorage.getItem('evo_shared_off') || '[]'))); setShowOwn(localStorage.getItem('evo_show_own') !== '0'); } catch {}
   }, []);
@@ -139,6 +142,16 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
                 <span>{(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'UTC'; } })()}</span></div>
               <Row title="Default calendar view" sub="Opens this view in My Calendar" value={settings.defaultView} onChange={v => updateSetting('defaultView', v)} opts={['Week', 'Day', 'Month', 'Agenda']} />
               <Row title="Sync frequency" sub="Meetings also refresh automatically every 30 seconds while the calendar is open" value={settings.syncFrequency} onChange={v => updateSetting('syncFrequency', v)} opts={['Every 5 minutes', 'Every 15 minutes', 'Every 30 minutes']} />
+            </div>
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="form-row"><div><b>Calendar colours</b><small>Choose the colour used for each calendar's meetings. Saved in this browser.</small></div></div>
+              {accounts.length === 0 && shared.length === 0 && <div className="form-row"><small>Connect an account or get a calendar shared with you to pick its colour.</small></div>}
+              {accounts.map(a => { const k = acctKey(a.provider, a.email); return (
+                <ColorRow key={a.id} label={a.email} sub={LABELS[a.provider] || a.provider} value={evColor({ provider: a.provider, accountEmail: a.email })} custom={hasOverride(k)}
+                  onChange={c => pickColor(k, c)} onReset={() => pickColor(k, null)} />); })}
+              {shared.map(c => { const k = sharedKey(c.id); return (
+                <ColorRow key={c.id} label={c.owner} sub="Shared with me" value={sharedColor(c.id)} custom={hasOverride(k)}
+                  onChange={v => pickColor(k, v)} onReset={() => pickColor(k, null)} />); })}
             </div>
           </section>
         )}
@@ -389,6 +402,15 @@ function PasteCode({ onDone }: { onDone: (email: string) => void }) {
   );
 }
 
+function ColorRow({ label, sub, value, custom, onChange, onReset }: { label: string; sub: string; value: string; custom: boolean; onChange: (c: string) => void; onReset: () => void }) {
+  return (
+    <div className="form-row"><div><b>{label}</b><small>{sub}</small></div>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input type="color" aria-label={`Colour for ${label}`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#2563eb'} onChange={e => onChange(e.target.value)} style={{ width: 36, height: 28, padding: 0, border: 0, background: 'none', cursor: 'pointer' }} />
+        {custom && <button className="btn" onClick={onReset}>Reset</button>}
+      </span></div>
+  );
+}
 function Head({ color, letter, title }: { color: string; letter: string; title: string }) {
   return <h2><span className="ilogo" style={{ background: color, width: 32, height: 32, fontSize: 15 }}>{letter}</span>{title}</h2>;
 }

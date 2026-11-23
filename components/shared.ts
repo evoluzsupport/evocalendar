@@ -24,9 +24,28 @@ export function setPalette(accounts: Acct[]) {
 }
 // Calendars shared with me get their own stable colour (by share id), distinct from the account colours above.
 const SHARED_COLORS = ['#0e9384', '#c11574', '#dd6b20', '#4f46e5', '#2e7d32', '#b54708', '#0086c9', '#7a5af8'];
-export const sharedColor = (id: string) => SHARED_COLORS[[...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % SHARED_COLORS.length];
+export const sharedColor = (id: string) => overrides['shared|' + id] || SHARED_COLORS[[...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % SHARED_COLORS.length];
 export const evColor = (e: { provider: string; accountEmail: string; calendarId?: string }) =>
-  e.calendarId ? sharedColor(e.calendarId) : palette[acctKey(e.provider, e.accountEmail)] || (COLORS[e.provider] ?? COLORS.other);
+  e.calendarId ? sharedColor(e.calendarId) : overrides[acctKey(e.provider, e.accountEmail)] || palette[acctKey(e.provider, e.accountEmail)] || (COLORS[e.provider] ?? COLORS.other);
+
+// User-chosen colours (per connected account, "shared|<shareId>" for shared calendars). Kept in this browser's localStorage.
+const OV_KEY = 'evo_colors';
+let overrides: Record<string, string> = {};
+export const defaultAcctColor = (provider: string, email: string) => palette[acctKey(provider, email)] || '#2563eb';
+export const sharedKey = (id: string) => 'shared|' + id;
+export function loadColorOverrides(): Record<string, string> {
+  try { overrides = JSON.parse(localStorage.getItem(OV_KEY) || '{}') || {}; } catch { overrides = {}; }
+  return overrides;
+}
+/** Set (or with null, reset) the colour for a key; returns the new overrides. */
+export function setColorOverride(key: string, color: string | null): Record<string, string> {
+  const next = { ...overrides };
+  if (color && /^#[0-9a-f]{6}$/i.test(color)) next[key] = color; else delete next[key];
+  overrides = next;
+  try { localStorage.setItem(OV_KEY, JSON.stringify(next)); } catch {}
+  return next;
+}
+export const hasOverride = (key: string) => !!overrides[key];
 
 export type SharedCal = { id: string; owner: string; email: string; permission: 'details' | 'busy' };
 
