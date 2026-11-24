@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type Ev = { id: string; provider: string; accountEmail: string; title: string; start: string; end: string; allDay: boolean; location?: string; calendarId?: string; calendarName?: string; busy?: boolean };
+export type Ev = { id: string; provider: string; accountEmail: string; title: string; start: string; end: string; allDay: boolean; location?: string; calendarId?: string; calendarName?: string; busy?: boolean; subId?: string; subName?: string };
 
 export const COLORS: Record<string, string> = { google: 'var(--google)', microsoft: 'var(--ms)', zoho: 'var(--zoho)', yahoo: 'var(--yahoo)', other: 'var(--other)' };
 export const LABELS: Record<string, string> = { google: 'Google', microsoft: 'Microsoft', zoho: 'Zoho', yahoo: 'Yahoo', other: 'Other', shared: 'Shared' };
@@ -25,8 +25,9 @@ export function setPalette(accounts: Acct[]) {
 // Calendars shared with me get their own stable colour (by share id), distinct from the account colours above.
 const SHARED_COLORS = ['#0e9384', '#c11574', '#dd6b20', '#4f46e5', '#2e7d32', '#b54708', '#0086c9', '#7a5af8'];
 export const sharedColor = (id: string) => overrides['shared|' + id] || SHARED_COLORS[[...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % SHARED_COLORS.length];
-export const evColor = (e: { provider: string; accountEmail: string; calendarId?: string }) =>
-  e.calendarId ? sharedColor(e.calendarId) : overrides[acctKey(e.provider, e.accountEmail)] || palette[acctKey(e.provider, e.accountEmail)] || (COLORS[e.provider] ?? COLORS.other);
+export const subKey = (provider: string, email: string, subId: string) => `cal|${provider}|${email}|${subId}`;
+export const evColor = (e: { provider: string; accountEmail: string; calendarId?: string; subId?: string }) =>
+  e.calendarId ? sharedColor(e.calendarId) : (e.subId && overrides[subKey(e.provider, e.accountEmail, e.subId)]) || overrides[acctKey(e.provider, e.accountEmail)] || palette[acctKey(e.provider, e.accountEmail)] || (COLORS[e.provider] ?? COLORS.other);
 
 // User-chosen colours (per connected account, "shared|<shareId>" for shared calendars). Kept in this browser's localStorage.
 const OV_KEY = 'evo_colors';

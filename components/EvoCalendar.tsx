@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CalendarView from './CalendarView';
-import { COLORS, LABELS, SharedCal, acctKey, api, evColor, fmtTime, hasOverride, loadColorOverrides, setColorOverride, setPalette, sharedColor, sharedKey, startOfDay, sameDay, useEvents } from './shared';
+import { COLORS, LABELS, SharedCal, acctKey, api, evColor, fmtTime, hasOverride, loadColorOverrides, subKey, setColorOverride, setPalette, sharedColor, sharedKey, startOfDay, sameDay, useEvents } from './shared';
 
 type Provider = { id: string; name: string; letter: string; desc: string; kind: 'oauth' | 'caldav'; caldavUrl?: string };
 type Account = { id: string; provider: string; email: string };
@@ -30,6 +30,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
   const [showOwn, setShowOwn] = useState(true);
   const seen = useRef<Set<string> | null>(null);
 
+  const [subCals, setSubCals] = useState<{ provider: string; accountEmail: string; id: string; name: string }[]>([]);
   const [, setColorVer] = useState(0); // bumps to re-render when a colour changes
   setPalette(accounts); // per-account colours
   const toast = useCallback((m: string) => { setToastMsg(m); setTimeout(() => setToastMsg(''), 3200); }, []);
@@ -38,6 +39,7 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
     setProviders(p); setAccounts(a); setSettings(s); setLoaded(true);
   }, []);
 
+  useEffect(() => { if (page === 'settings') api('/calendars').then(setSubCals).catch(() => {}); }, [page, accounts.length]);
   useEffect(() => { loadColorOverrides(); setColorVer(v => v + 1); }, []);
   const pickColor = (key: string, c: string | null) => { setColorOverride(key, c); setColorVer(v => v + 1); };
   useEffect(() => {
@@ -149,6 +151,10 @@ export default function EvoCalendar({ user }: { user: { name: string; email: str
               {accounts.map(a => { const k = acctKey(a.provider, a.email); return (
                 <ColorRow key={a.id} label={a.email} sub={LABELS[a.provider] || a.provider} value={evColor({ provider: a.provider, accountEmail: a.email })} custom={hasOverride(k)}
                   onChange={c => pickColor(k, c)} onReset={() => pickColor(k, null)} />); })}
+              {subCals.length > 0 && <div className="form-row"><div><b>Individual calendars</b><small>Override the account colour for a single calendar inside an account</small></div></div>}
+              {subCals.map(c => { const k = subKey(c.provider, c.accountEmail, c.id); return (
+                <ColorRow key={k} label={c.name} sub={`${LABELS[c.provider] || c.provider} · ${c.accountEmail}`} value={evColor({ provider: c.provider, accountEmail: c.accountEmail, subId: c.id })} custom={hasOverride(k)}
+                  onChange={v => pickColor(k, v)} onReset={() => pickColor(k, null)} />); })}
               {shared.map(c => { const k = sharedKey(c.id); return (
                 <ColorRow key={c.id} label={c.owner} sub="Shared with me" value={sharedColor(c.id)} custom={hasOverride(k)}
                   onChange={v => pickColor(k, v)} onReset={() => pickColor(k, null)} />); })}

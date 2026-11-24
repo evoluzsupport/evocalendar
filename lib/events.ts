@@ -2,7 +2,7 @@ import { PROVIDERS, ProviderId, zohoAccounts, zohoCalendar, cred, DEMO } from '.
 import { decrypt } from './crypto';
 import { Account, isCookieUser, patchAccount } from './store';
 
-export interface CalEvent { id: string; provider: string; accountEmail: string; title: string; start: string; end: string; allDay: boolean; location?: string; calendarId?: string; calendarName?: string; busy?: boolean }
+export interface CalEvent { id: string; provider: string; accountEmail: string; title: string; start: string; end: string; allDay: boolean; location?: string; calendarId?: string; calendarName?: string; busy?: boolean; subId?: string; subName?: string }
 
 export async function tokenRequest(tokenUrl: string, body: Record<string, string>) {
   const r = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) });
@@ -41,11 +41,25 @@ async function google(a: Account, from: Date, to: Date): Promise<CalEvent[]> {
     const j = await getJson(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${from.toISOString()}&timeMax=${to.toISOString()}`, h).catch((e: Error) => { failed.push(`${c.summary || c.id}: ${e.message}`); return { items: [] }; });
     return (j.items || []).filter((e: any) => e.status !== 'cancelled').map((e: any): CalEvent => {
       const allDay = !!e.start?.date;
-      return { id: 'g' + e.id, provider: 'google', accountEmail: a.email, title: e.summary || '(no title)', allDay, location: e.location,
+      return { id: 'g' + e.id, provider: 'google', accountEmail: a.email, title: e.summary || '(no title)', allDay, location: e.location, subId: c.id, subName: c.summary || c.id,
         start: allDay ? e.start.date + 'T00:00:00' : e.start.dateTime, end: allDay ? e.end.date + 'T00:00:00' : e.end.dateTime }; // all-day = floating local date (no Z)
     });
   }));
   if (failed.length === cals.length && failed.length) throw new Error('could not read any calendar (' + failed[0] + ')');
+  return out.flat();
+}
+
+/** The individual calendars inside an account (Google / Zoho), so the user can colour each one. */
+export async function listSubCalendars(accounts: Account[]): Promise<{ provider: string; accountEmail: string; id: string; name: string }[]> {
+  const out = await Promise.all(accounts.filter(a => a.provider === 'google' || a.provider === 'zoho').map(async a => {
+    try {
+      const h = a.provider === 'google' ? { Authorization: 'Bearer ' + (await freshToken(a)) } : { Authorization: 'Zoho-oauthtoken ' + (await freshToken(a)) };
+      const j = a.provider === 'google'
+        ? (await getJson('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader', h)).items || []
+        : (await getJson(`${zohoCalendar(a.caldav)}/api/v1/calendars`, h)).calendars || [];
+      return j.slice(0, 30).map((c: any) => ({ provider: a.provider, accountEmail: a.email, id: String(a.provider === 'google' ? c.id : c.uid), name: String(a.provider === 'google' ? c.summaryOverride || c.summary || c.id : c.name || c.uid) }));
+    } catch { return []; }
+  }));
   return out.flat();
 }
 
@@ -93,7 +107,7 @@ async function zoho(a: Account, from: Date, to: Date): Promise<CalEvent[]> {
     for (const ev of j.events || []) {
       const dt = ev.dateandtime || {};
       if (!dt.start) continue;
-      out.push({ id: 'z' + ev.uid, provider: 'zoho', accountEmail: a.email, title: ev.title || '(no title)', allDay: !!ev.isallday,
+      out.push({ id: 'z' + ev.uid, provider: 'zoho', accountEmail: a.email, title: ev.title || '(no title)', allDay: !!ev.isallday, subId: c.uid, subName: c.name || c.uid,
         location: ev.location || undefined, ...(ev.isallday ? zohoAllDay(dt.start, dt.end) : { start: zohoDate(dt.start).toISOString(), end: zohoDate(dt.end || dt.start).toISOString() }) });
     }
   })));
