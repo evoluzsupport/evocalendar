@@ -470,7 +470,18 @@ function CaldavForm({ preset, yahooUrl, onCancel, onDone }: { preset: 'yahoo' | 
   return (
     <>
       <Head color={yahoo ? COLORS.yahoo : COLORS.other} letter={yahoo ? 'Y' : '+'} title={yahoo ? 'Connect Yahoo' : 'Connect another email platform'} />
-      <p className="sub">{yahoo ? <>Yahoo needs an app password, not your normal password. Open <a href="https://login.yahoo.com/account/security" target="_blank" rel="noreferrer">Yahoo Account Security</a>, turn on two-step verification, choose “Generate app password”, then paste it here.</> : 'Enter your mailbox details. Hostinger, custom domains and any CalDAV server are supported.'}</p>
+      {yahoo ? (
+        <div className="ysteps">
+          <p className="sub" style={{ marginBottom: 8 }}>Yahoo doesn’t accept your normal password here. Create a one-time <b>app password</b> first:</p>
+          <ol>
+            <li>Open <a href="https://login.yahoo.com/account/security" target="_blank" rel="noreferrer">Yahoo Account Security</a> and sign in.</li>
+            <li>Turn on <b>Two-step verification</b> if it isn’t on already.</li>
+            <li>Choose <b>Generate app password</b>, name it “OneCalendar” and click Generate.</li>
+            <li>Copy the 16-character code Yahoo shows.</li>
+            <li>Enter your full Yahoo email below and paste that code as the app password.</li>
+          </ol>
+        </div>
+      ) : <p className="sub">Enter your mailbox details. Hostinger, custom domains and any CalDAV server are supported.</p>}
       <div className="field"><label>Email address</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoFocus /></div>
       <div className="field"><label>{yahoo ? 'App password' : 'Mailbox password'}</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} /></div>
       {!yahoo && <div className="field"><label>CalDAV URL</label><input value={caldav} onChange={e => setCaldav(e.target.value)} placeholder="https://caldav.your-provider.com" /></div>}
