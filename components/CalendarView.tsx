@@ -129,6 +129,7 @@ function TimeGrid({ days, events, now, onOpen }: { days: Date[]; events: Ev[]; n
   const [zoom, setZoom] = useState(0);
   const [tz, setTz] = useState('');
   const body = useRef<HTMLDivElement | null>(null);
+  const [sbw, setSbw] = useState(0); // width of the body's vertical scrollbar, so the header columns line up with the day columns
   const { px: HP, step } = ZOOMS[zoom];
   // Time zone is read on the client only (the server's zone may differ), e.g. "Asia/Calcutta (GMT+5:30)".
   useEffect(() => {
@@ -137,6 +138,13 @@ function TimeGrid({ days, events, now, onOpen }: { days: Date[]; events: Ev[]; n
       setTz(`${Intl.DateTimeFormat().resolvedOptions().timeZone}${o ? ' (' + o + ')' : ''}`);
     } catch { setTz('UTC'); }
   }, []);
+  useEffect(() => {
+    const el = body.current; if (!el) return;
+    const measure = () => setSbw(el.offsetWidth - el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure); ro.observe(el);
+    return () => ro.disconnect();
+  }, [zoom, days.length]);
   const scroller = (el: HTMLDivElement | null) => { body.current = el; if (el && !el.dataset.done) { el.scrollTop = 7.5 * HP; el.dataset.done = '1'; } };
   const changeZoom = (next: number) => {
     if (next < 0 || next >= ZOOMS.length) return;
@@ -159,7 +167,7 @@ function TimeGrid({ days, events, now, onOpen }: { days: Date[]; events: Ev[]; n
           <button className="btn" onClick={() => changeZoom(zoom + 1)} disabled={zoom === ZOOMS.length - 1} aria-label="Zoom in">+</button>
         </span>
       </div>
-      <div className="tg-head" style={{ gridTemplateColumns: cols }}>
+      <div className="tg-head" style={{ gridTemplateColumns: cols, paddingRight: sbw }}>
         <div className="hd" />
         {days.map(d => <div key={+d} className={'hd' + (sameDay(d, now) ? ' today' : '')}>{d.toLocaleDateString([], { weekday: 'short' })} <b>{d.getDate()}</b></div>)}
         <div className="allday-l">all-day</div>

@@ -176,6 +176,9 @@ aside{position:sticky;top:0;height:100vh}
 .tg-head{border-bottom:2px solid var(--grid);background:#eef0f4}
 .tg-head .hd{color:#374151;font-weight:700}
 .allday{border-left:1px solid var(--grid)}
+.tg-head .hd:not(:first-child){border-left:1px solid var(--grid)} /* header day cells carry the same vertical lines as the grid below */
+.tg-head .allday-l{border-top:1px solid var(--grid-soft)}
+.tg-head .allday{border-top:1px solid var(--grid-soft)}
 .allday-l{color:#374151}
 .gutter{border-right:1px solid var(--grid)}
 .gutter span{color:#374151;font-weight:600;font-size:11px}
